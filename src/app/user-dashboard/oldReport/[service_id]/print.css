@@ -1,0 +1,317 @@
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1.2; /* Tighter line height for more space */
+    font-family: Arial, sans-serif;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  #print-content {
+    width: 210mm;
+    height: 297mm;
+    padding: 4mm; /* Reduced overall padding */
+    box-sizing: border-box;
+    border: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    gap: 2px; /* Reduced gap between sections */
+    transform: scale(0.99); /* Slightly increased scale to fill more space */
+    transform-origin: top left;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  header {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 1rem !important; /* Adjusted gap */
+    flex-wrap: nowrap !important;
+    background: transparent !important;
+    color: #000 !important;
+    margin-bottom: 2mm !important; /* Reduced bottom margin */
+    padding-bottom: 2px !important; /* Reduced bottom padding */
+  }
+
+  header > div:first-child {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  header > div:last-child {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    text-align: right !important;
+    margin-top: -5rem !important;
+    background: transparent !important;
+  }
+
+  header img {
+    height: 4rem !important; /* Reduced image height */
+  }
+
+  h1,
+  h2,
+  h3 {
+    margin: 0 !important;
+    font-size: 14px !important; /* Slightly reduced font size */
+    font-weight: bold !important;
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  h2 {
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 1px; /* Reduced padding */
+    margin-bottom: 2px !important; /* Reduced bottom margin */
+  }
+
+  /* SERVICE REPORT Title */
+  .service-report-title {
+    font-size: 22px !important; /* Slightly reduced title font size */
+    font-weight: 900 !important;
+    color: #000 !important;
+    background: transparent !important;
+    margin-top: 4px !important; /* Reduced top margin */
+    margin-bottom: 4px !important; /* Reduced bottom margin */
+  }
+
+  address,
+  .text-sm {
+    font-size: 9.5px !important; /* Slightly reduced font size */
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  /* Combined Details Table */
+  .mb-6 {
+    margin-bottom: 2px !important; /* Reduced bottom margin for all mb-6 sections */
+  }
+
+  .mb-6 table {
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin: 0; /* Removed margin */
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .mb-6 table th,
+  .mb-6 table td {
+    padding: 3px 5px !important; /* Reduced padding */
+    border: 1px solid #333 !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .mb-6 table .font-medium {
+    font-weight: 700 !important;
+  }
+
+  /* Checklist section */
+  .mb-6.p-4.border.rounded-md.bg-gray-50 {
+    border: 1px solid #333 !important;
+    padding: 4px !important; /* Reduced padding */
+    margin: 2px 0 !important; /* Reduced margin */
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .mb-6.p-4.border.rounded-md.bg-gray-50 .grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0 !important;
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    border-collapse: collapse !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .mb-6.p-4.border.rounded-md.bg-gray-50 .grid > div {
+    display: flex;
+    align-items: center;
+    padding: 2px 4px; /* Reduced padding */
+    white-space: nowrap;
+    border: 1px solid #333 !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .mb-6.p-4.border.rounded-md.bg-gray-50 input {
+    transform: scale(0.7);
+    margin-right: 2px;
+  }
+
+  /* Service Rendered & Spare Parts */
+  .services-table,
+  .service-rendered {
+    display: table !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 2px 0 !important; /* Reduced margin */
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    border: 1px solid #333 !important;
+    table-layout: fixed !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .services-table > div,
+  .service-rendered > div {
+    display: table-row !important;
+  }
+
+  .services-table > div > *,
+  .service-rendered > div > * {
+    display: table-cell !important;
+    border: 1px solid #333 !important;
+    padding: 3px 5px !important; /* Reduced padding */
+    vertical-align: top !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .services-table h3 {
+    font-size: 11px !important; /* Slightly reduced font size */
+    margin: 0 !important;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding: 2px; /* Reduced padding */
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  /* Feedback inline row */
+  .feedback-table {
+    display: table !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin: 2px 0 !important; /* Reduced margin */
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    table-layout: fixed !important;
+    border: 1px solid #333 !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .feedback-table > div {
+    display: table-row !important;
+  }
+
+  .feedback-table > div > * {
+    display: table-cell !important;
+    border: 1px solid #333 !important;
+    padding: 3px 5px !important; /* Reduced padding */
+    vertical-align: top !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  table {
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    border-collapse: collapse !important;
+    width: 100% !important;
+    margin: 2px 0; /* Reduced margin */
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  table th,
+  table td {
+    padding: 3px 4px !important; /* Reduced padding */
+    border: 1px solid #333 !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  /* Signature Section */
+  .signature-section {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1rem !important; /* Reduced gap */
+    border: 1px solid #333 !important;
+    background: transparent !important;
+    color: #000 !important;
+    margin-top: 2px !important; /* Set a small top margin, remove auto */
+  }
+
+  .signature-section > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: center !important;
+    border: 1px solid #333 !important;
+    padding: 8px !important; /* Reduced padding */
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .signature-section h3 {
+    font-size: 11px !important; /* Slightly reduced font size */
+    margin-bottom: 8px !important; /* Reduced margin */
+    border-bottom: 1px solid #333 !important;
+    padding-bottom: 4px !important; /* Reduced padding */
+    width: 100% !important;
+    text-align: center !important;
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  .signature-section img {
+    max-height: 100px !important; /* Reduced max height */
+    width: auto !important;
+    object-fit: contain !important;
+    margin-bottom: 8px !important; /* Reduced margin */
+    border: 1px solid #333 !important;
+  }
+
+  /* Label : Value inline */
+  .signature-section .read-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    align-items: baseline !important;
+    gap: 4px !important; /* Reduced gap */
+    margin: 2px 0 !important; /* Reduced margin */
+    font-size: 10.5px !important; /* Slightly reduced font size */
+    text-align: left !important;
+    width: 100% !important;
+    color: #000 !important;
+  }
+
+  .signature-section .read-row label {
+    font-weight: 900 !important;
+    white-space: nowrap !important;
+    margin-right: 4px !important;
+    color: #000 !important;
+  }
+
+  .signature-section .read-row span {
+    flex: 1 !important;
+    display: inline-block !important;
+    text-align: left !important;
+    color: #000 !important;
+  }
+
+  /* Hide print button */
+  .no-print {
+    display: none !important;
+  }
+}

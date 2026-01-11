@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: monospace;
+}
+
+
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #555353;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@media print {
+  /* Remove background color and margin from the page for printing */
+  body {
+    background-color: white !important;
+    margin: 0 !important;
+  }
+
+  /* Make the main container take up the full width and remove box styling */
+  .print-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Reset the flexbox properties to allow content to flow naturally */
+  .print-wrapper,
+  .flex,
+  .items-center,
+  .justify-center {
+    display: block !important;
+    min-height: auto !important;
+  }
+
+  /* Hide elements you don't want to print */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ensure key sections don't get broken across pages */
+  .avoid-break {
+    page-break-inside: avoid;
+  }
+}
+
+
