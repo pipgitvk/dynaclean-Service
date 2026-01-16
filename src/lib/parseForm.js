@@ -2,11 +2,6 @@ import { IncomingForm } from "formidable";
 import { Readable } from "stream";
 
 // This disables Next.js default body parsing
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 function toNodeRequest(request) {
   const reader = request.body.getReader();
