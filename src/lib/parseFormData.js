@@ -3,11 +3,6 @@ import { IncomingForm } from "formidable";
 import { Readable } from "stream";
 
 // Important: Disable body parsing
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 // Convert Web Request to Node Stream
 function toNodeRequest(request) {

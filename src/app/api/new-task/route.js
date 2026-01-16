@@ -5,11 +5,6 @@ import { jwtVerify } from "jose";
 import { getDbConnection } from "@/lib/db";
 
 // Set max upload size
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -17,9 +12,13 @@ export async function POST(req) {
   try {
     // ✅ Get token from cookies
     const token = req.cookies.get("token")?.value;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!token)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(JWT_SECRET));
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(JWT_SECRET)
+    );
     const createdby = payload.username;
 
     const formData = await req.formData();
@@ -52,7 +51,9 @@ export async function POST(req) {
     // ✅ Insert into DB
     const conn = await getDbConnection();
 
-    const [[{ max_id }]] = await conn.execute("SELECT MAX(task_id) AS max_id FROM task");
+    const [[{ max_id }]] = await conn.execute(
+      "SELECT MAX(task_id) AS max_id FROM task"
+    );
     const task_id = (max_id || 999) + 1;
 
     await conn.execute(
@@ -79,12 +80,17 @@ export async function POST(req) {
       [task_id, createdby, taskassignto]
     );
 
-        // await conn.end();
+    // await conn.end();
 
     // ✅ Success redirect
-    return NextResponse.redirect(new URL("/user-dashboard?success=task_created", req.url));
+    return NextResponse.redirect(
+      new URL("/user-dashboard?success=task_created", req.url)
+    );
   } catch (err) {
     console.error("❌ Task creation failed:", err);
-    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
   }
 }
