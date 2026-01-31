@@ -21,7 +21,7 @@ export default async function ViewServiceReportsPage() {
 
   role = payload.role;
   console.log(
-    "_________________________________________________________________"
+    "_________________________________________________________________",
   );
   console.log("this  is the username:", payload);
 
@@ -51,7 +51,7 @@ export default async function ViewServiceReportsPage() {
 
     const [rows] = await conn.execute(sql, [user]);
 
-    // console.log("this is the rows: ", rows);
+    console.log("this is the rows: ", rows);
 
     serviceRecords = rows.map((row) => ({
       ...row,
@@ -65,7 +65,7 @@ export default async function ViewServiceReportsPage() {
         ? new Date(row.completed_date).toLocaleDateString()
         : "N/A",
     }));
-    
+
     // conn.end();
   } catch (error) {
     console.error("Error fetching service records:", error);
