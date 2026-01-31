@@ -4,7 +4,7 @@ import { join } from "path";
 
 export async function PUT(req, { params }) {
   try {
-    const { expenseId } = params;
+    const { expenseId } = await params;
     const formData = await req.formData();
 
     // Extract form fields
@@ -25,20 +25,22 @@ export async function PUT(req, { params }) {
     // Handle new file uploads
     const newAttachments = [];
     const attachments = formData.getAll("attachments");
-    
+
     for (const file of attachments) {
       if (file && file.size > 0) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
-        
+
         // Create unique filename
         const timestamp = Date.now();
         const filename = `${timestamp}-${file.name}`;
         const path = join(process.cwd(), "public", "attachments", filename);
-        
+
         // Ensure directory exists
-        await mkdir(join(process.cwd(), "public", "attachments"), { recursive: true });
-        
+        await mkdir(join(process.cwd(), "public", "attachments"), {
+          recursive: true,
+        });
+
         // Write file
         await writeFile(path, buffer);
         newAttachments.push(`/attachments/${filename}`);
@@ -90,10 +92,13 @@ export async function PUT(req, { params }) {
     const [result] = await conn.execute(sql, values);
     // await conn.end();
 
-    return new Response(JSON.stringify({ ok: true, affectedRows: result.affectedRows }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: true, affectedRows: result.affectedRows }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), {
       status: 500,
@@ -101,5 +106,3 @@ export async function PUT(req, { params }) {
     });
   }
 }
-
-

@@ -6,12 +6,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 export const dynamic = "force-dynamic";
 
 export default async function AddTaskPage() {
-  const token = cookies().get("token")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
   if (!token) return <p className="text-red-500">❌ Unauthorized</p>;
 
   const { payload } = await jwtVerify(
     token,
-    new TextEncoder().encode(JWT_SECRET)
+    new TextEncoder().encode(JWT_SECRET),
   );
 
   return (

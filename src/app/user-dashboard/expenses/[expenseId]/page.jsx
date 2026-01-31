@@ -12,27 +12,27 @@ async function getExpenseById(expenseId) {
 
   const [rows] = await connection.execute(
     "SELECT * FROM expenses WHERE ID = ?",
-    [expenseId]
+    [expenseId],
   );
   // await connection.end();
   return rows[0];
 }
 
 export default async function ExpenseDetailPage({ params }) {
-  const expenseId = params.expenseId;
+  const { expenseId } = await params;
   const expense = await getExpenseById(expenseId);
   if (!expense)
     return (
       <div className="p-6 text-center text-red-600">Expense not found</div>
     );
-
-  const token = cookies().get("token")?.value;
+  const CookieStore = await cookies();
+  const token = CookieStore.get("token")?.value;
   let loggedInUser = "unknown";
   let role = "unknown";
   if (token) {
     const { payload } = await jwtVerify(
       token,
-      new TextEncoder().encode(process.env.JWT_SECRET)
+      new TextEncoder().encode(process.env.JWT_SECRET),
     );
     console.log("**************************************");
     console.log("this is the role:", payload);

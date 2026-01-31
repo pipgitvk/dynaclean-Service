@@ -12,7 +12,7 @@ async function getTaskDetails(taskId) {
   // Task
   const [taskRows] = await connection.execute(
     `SELECT * FROM task WHERE task_id = ?`,
-    [taskId]
+    [taskId],
   );
   if (taskRows.length === 0) {
     // await connection.end();
@@ -24,7 +24,7 @@ async function getTaskDetails(taskId) {
   // Follow-ups
   const [followupRows] = await connection.execute(
     `SELECT followed_date, notes FROM task_followup WHERE task_id = ?`,
-    [taskId]
+    [taskId],
   );
 
   // await connection.end();
@@ -33,8 +33,9 @@ async function getTaskDetails(taskId) {
 }
 
 export default async function ViewTaskPage({ params }) {
-  const taskId = params.task_id;
-  const data = await getTaskDetails(taskId);
+  const { task_id } = await params;
+  // console.log("view task", task_id);
+  const data = await getTaskDetails(task_id);
 
   if (!data) return notFound();
 
@@ -170,7 +171,7 @@ export default async function ViewTaskPage({ params }) {
 
         <div className="mt-6">
           <a
-            href={`/user-dashboard/followup_task/${taskId}`}
+            href={`/user-dashboard/followup_task/${task_id}`}
             className="inline-block bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg text-sm"
           >
             Follow Task
