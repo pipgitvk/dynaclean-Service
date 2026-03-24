@@ -481,11 +481,11 @@ export const generateServiceReportPDF = async (reportData, productData, installD
     // });
 
     const canvas = await html2canvas(tempContainer, {
-      scale: 2,         // higher DPI for sharper text
+      scale: 1.2,
       useCORS: true,
-      allowTaint: true,  // Allow rendering of data URLs
+      allowTaint: true,
       backgroundColor: '#ffffff',
-      width: 794,       // A4 width in px
+      width: 794,
       windowWidth: 794
     });
 
@@ -494,7 +494,7 @@ export const generateServiceReportPDF = async (reportData, productData, installD
     document.body.removeChild(tempContainer);
 
     // Create PDF from canvas - SINGLE PAGE
-    const imgData = canvas.toDataURL('image/png');
+    const imgData = canvas.toDataURL('image/jpeg', 0.7);
     const pdf = new jsPDF('p', 'mm', 'a4');
 
     const pageWidth = pdf.internal.pageSize.getWidth();
@@ -527,7 +527,7 @@ export const generateServiceReportPDF = async (reportData, productData, installD
     // pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight);
 
     // Add image to single page, aligned to top
-    pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight);
+    pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalWidth, finalHeight);
 
 
     return pdf;
