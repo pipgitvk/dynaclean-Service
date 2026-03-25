@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.9",
+    "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.13",
+    "face-api.js": "^0.22.2",
     "formidable": "^3.5.4",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.11.2",
@@ -21,6 +23,7 @@
     "lucide-react": "^0.541.0",
     "mysql2": "^3.14.3",
     "next": "^16.1.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

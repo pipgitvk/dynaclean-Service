@@ -1,9 +1,14 @@
-// pages/api/attendance.js or src/app/api/attendance/route.js
+// src/app/api/attendance/route.js
 
 import { getDbConnection } from "@/lib/db";
 import { NextResponse } from "next/server";
+import { v2 as cloudinary } from "cloudinary";
 
-
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const getReverseGeocode = async (lat, lon) => {
   try {
@@ -11,28 +16,40 @@ const getReverseGeocode = async (lat, lon) => {
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
       {
         headers: {
-          'User-Agent': 'DynacleanIndustriesApp/1.0 (contact@dynacleanindustries.com)'
-        }
+          "User-Agent": "DynacleanIndustriesApp/1.0 (contact@dynacleanindustries.com)",
+        },
       }
     );
 
-    // Check if the response was successful before trying to parse
     if (!response.ok) {
-      const errorBody = await response.text(); // Read the error body
-      console.error('Nominatim API error:', response.status, errorBody);
+      const errorBody = await response.text();
+      console.error("Nominatim API error:", response.status, errorBody);
       return "Failed to get address";
     }
 
     const data = await response.json();
     return data.display_name || "Address not found";
-
   } catch (error) {
     console.error("Reverse geocoding error:", error);
     return "Failed to get address";
   }
 };
 
-
+const uploadPhotoToCloudinary = async (base64Image, username, date) => {
+  try {
+    const result = await cloudinary.uploader.upload(base64Image, {
+      folder: "attendance/checkin",
+      public_id: `${username}_${date}`,
+      overwrite: true,
+      resource_type: "image",
+      transformation: [{ width: 640, height: 480, crop: "limit", quality: "auto" }],
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    return null;
+  }
+};
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
@@ -53,19 +70,17 @@ export async function GET(req) {
     console.error("Database error:", error);
     return NextResponse.json({ error: "Failed to fetch attendance data" }, { status: 500 });
   } finally {
-    // conn.end();
     console.log("Database connection closed.");
-    
   }
 }
 
 export async function POST(req) {
-  const { username, action, latitude, longitude } = await req.json();
+  const body = await req.json();
+  const { username, action, latitude, longitude, checkin_photo } = body;
   const conn = await getDbConnection();
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
 
-  // Variable to store location data if provided
   let locationAddress = null;
   if (latitude && longitude) {
     locationAddress = await getReverseGeocode(latitude, longitude);
@@ -73,61 +88,74 @@ export async function POST(req) {
 
   try {
     switch (action) {
-      case 'checkin':
+      case "checkin": {
+        if (!checkin_photo) {
+          return NextResponse.json(
+            { error: "Face photo is required for check-in" },
+            { status: 400 }
+          );
+        }
+
+        // Upload face photo to Cloudinary
+        const photoUrl = await uploadPhotoToCloudinary(checkin_photo, username, today);
+
         await conn.execute(
-          "INSERT INTO attendance_logs (username, date, checkin_time, checkin_latitude, checkin_longitude, checkin_address) VALUES (?, ?, ?, ?, ?, ?)",
-          [username, today, now, latitude, longitude, locationAddress]
+          "INSERT INTO attendance_logs (username, date, checkin_time, checkin_latitude, checkin_longitude, checkin_address, checkin_photo) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [username, today, now, latitude, longitude, locationAddress, photoUrl]
         );
         break;
+      }
 
-      case 'break_morning':
+      case "break_morning":
         await conn.execute(
           "UPDATE attendance_logs SET break_morning_start = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'end_morning':
+      case "end_morning":
         await conn.execute(
           "UPDATE attendance_logs SET break_morning_end = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'break_lunch':
+      case "break_lunch":
         await conn.execute(
           "UPDATE attendance_logs SET break_lunch_start = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'end_lunch':
+      case "end_lunch":
         await conn.execute(
           "UPDATE attendance_logs SET break_lunch_end = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'break_evening':
+      case "break_evening":
         await conn.execute(
           "UPDATE attendance_logs SET break_evening_start = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'end_evening':
+      case "end_evening":
         await conn.execute(
           "UPDATE attendance_logs SET break_evening_end = ? WHERE username = ? AND date = ?",
           [now, username, today]
         );
         break;
 
-      case 'checkout':
+      case "checkout": {
+        const checkoutAddress = locationAddress || "Auto checkout at 6:30 PM";
         await conn.execute(
           "UPDATE attendance_logs SET checkout_time = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_address = ? WHERE username = ? AND date = ?",
-          [now, latitude, longitude, locationAddress, username, today]
+          [now, latitude ?? null, longitude ?? null, checkoutAddress, username, today]
         );
         break;
+      }
 
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -138,8 +166,6 @@ export async function POST(req) {
     console.error("Database error:", error);
     return NextResponse.json({ error: "Failed to perform action" }, { status: 500 });
   } finally {
-    // conn.end();
     console.log("Database connection closed.");
-    
   }
 }

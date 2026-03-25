@@ -1,6 +1,7 @@
 // src/components/AttendanceTracker.jsx
 "use client";
 import React, { useState, useEffect } from "react";
+import FaceCaptureModal from "./FaceCaptureModal";
 
 const AttendanceTracker = ({ username }) => {
   const [attendanceData, setAttendanceData] = useState(null);
@@ -9,7 +10,9 @@ const AttendanceTracker = ({ username }) => {
   const [remainingBreakTime, setRemainingBreakTime] = useState(null);
   const [preBreakTime, setPreBreakTime] = useState(null);
   const [endBreakNotification, setEndBreakNotification] = useState(null);
-  const [locationLoading, setLocationLoading] = useState(false); // New state for location loading
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   // Define break rules here (since we're not fetching them from the backend)
   const breakRules = {
@@ -39,21 +42,101 @@ const AttendanceTracker = ({ username }) => {
     fetchAttendance();
   }, [username]);
 
-  // Handle button clicks
+  // Client-side auto-checkout safety net: if it's past 6:30 PM and user hasn't checked out
+  useEffect(() => {
+    if (!attendanceData) return;
+    if (attendanceData.checkout_time) return;
+    if (!attendanceData.checkin_time) return;
+
+    const now = new Date();
+    const cutoff = new Date();
+    cutoff.setHours(18, 30, 0, 0); // 6:30 PM
+
+    if (now >= cutoff) {
+      // Trigger auto-checkout from client side as a fallback
+      fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, action: "checkout" }),
+      })
+        .then((res) => { if (res.ok) fetchAttendance(); })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceData]);
+
+  // Called when Check In button is clicked — open camera first
+  const handleCheckinClick = () => {
+    setPreBreakTime(null);
+    setEndBreakNotification(null);
+    setShowCameraModal(true);
+  };
+
+  // Called after face photo is captured successfully
+  const handleFaceCaptured = async (base64Photo) => {
+    setShowCameraModal(false);
+    setLocationLoading(true);
+
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      setLocationLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        await sendCheckinWithPhotoAndLocation(base64Photo, latitude, longitude);
+        setLocationLoading(false);
+      },
+      (err) => {
+        console.error("Location error:", err);
+        alert(`Failed to get location: ${err.message}`);
+        setLocationLoading(false);
+      }
+    );
+  };
+
+  const sendCheckinWithPhotoAndLocation = async (base64Photo, latitude, longitude) => {
+    setPhotoUploading(true);
+    try {
+      const response = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          action: "checkin",
+          latitude,
+          longitude,
+          checkin_photo: base64Photo,
+        }),
+      });
+      if (response.ok) {
+        fetchAttendance();
+      } else {
+        console.error("Failed to check in");
+        alert("Check-in failed. Please try again.");
+      }
+    } catch (error) {
+      console.error("API call failed:", error);
+      alert("Check-in failed. Please try again.");
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
+
+  // Handle button clicks for non-checkin actions
   const handleAction = async (actionType) => {
-    // Immediately clear all notifications when any action is taken
     setPreBreakTime(null);
     setEndBreakNotification(null);
 
-    // If the action is check-in or checkout, get location first
-    if (actionType === "checkin" || actionType === "checkout") {
+    if (actionType === "checkout") {
       setLocationLoading(true);
       if (!navigator.geolocation) {
         alert("Geolocation is not supported by your browser.");
         setLocationLoading(false);
         return;
       }
-
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
@@ -75,15 +158,8 @@ const AttendanceTracker = ({ username }) => {
     try {
       const response = await fetch("/api/attendance", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username,
-          action: actionType,
-          latitude,
-          longitude,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, action: actionType, latitude, longitude }),
       });
       if (response.ok) {
         fetchAttendance();
@@ -124,18 +200,13 @@ const AttendanceTracker = ({ username }) => {
         }
 
         if (currentBreak) {
-          const startTime = new Date(
-            attendanceData[`break_${currentBreak}_start`]
-          );
+          const startTime = new Date(attendanceData[`break_${currentBreak}_start`]);
           const elapsedTime = now.getTime() - startTime.getTime();
           setRemainingBreakTime(elapsedTime);
 
-          const breakDurationMs =
-            breakRules[currentBreak].duration_minutes * 60 * 1000;
+          const breakDurationMs = breakRules[currentBreak].duration_minutes * 60 * 1000;
           const breakEndTime = new Date(startTime.getTime() + breakDurationMs);
-          const twoMinutesBeforeEnd = new Date(
-            breakEndTime.getTime() - 2 * 60 * 1000
-          );
+          const twoMinutesBeforeEnd = new Date(breakEndTime.getTime() - 2 * 60 * 1000);
 
           if (now > twoMinutesBeforeEnd && now < breakEndTime) {
             const timeToEnd = breakEndTime.getTime() - now.getTime();
@@ -155,14 +226,11 @@ const AttendanceTracker = ({ username }) => {
         for (const breakName in breakRules) {
           const rule = breakRules[breakName];
           const ruleStartTime = new Date(`${today}T${rule.start_time}`);
-          const twoMinutesBefore = new Date(
-            ruleStartTime.getTime() - 2 * 60 * 1000
-          );
+          const twoMinutesBefore = new Date(ruleStartTime.getTime() - 2 * 60 * 1000);
 
           if (now > twoMinutesBefore && now < ruleStartTime) {
             if (
-              (breakName === "morning" &&
-                !attendanceData.break_morning_start) ||
+              (breakName === "morning" && !attendanceData.break_morning_start) ||
               (breakName === "lunch" &&
                 !attendanceData.break_lunch_start &&
                 attendanceData.break_morning_end) ||
@@ -195,9 +263,7 @@ const AttendanceTracker = ({ username }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-4">
-        <div className="text-gray-600 font-medium">
-          Loading attendance data...
-        </div>
+        <div className="text-gray-600 font-medium">Loading attendance data...</div>
       </div>
     );
   }
@@ -218,25 +284,25 @@ const AttendanceTracker = ({ username }) => {
 
   // Conditional button rendering logic
   const renderActionButton = () => {
-    if (locationLoading) {
+    if (locationLoading || photoUploading) {
       return (
         <div className="text-center text-gray-700 font-semibold mb-2 p-3 bg-gray-200 rounded-lg animate-pulse">
-          Getting your location...
+          {photoUploading ? "Saving check-in photo..." : "Getting your location..."}
         </div>
       );
     }
 
-    // ... (rest of the render logic remains the same)
     if (!attendanceData) {
       return (
         <button
-          onClick={() => handleAction("checkin")}
+          onClick={handleCheckinClick}
           className={`${buttonClass} bg-blue-600 text-white hover:bg-blue-700`}
         >
-          Check In
+          📷 Check In
         </button>
       );
     }
+
     const {
       break_morning_start,
       break_morning_end,
@@ -245,7 +311,9 @@ const AttendanceTracker = ({ username }) => {
       break_evening_start,
       break_evening_end,
       checkout_time,
+      checkin_photo,
     } = attendanceData;
+
     if (checkout_time) {
       return (
         <div className="text-center text-green-600 font-semibold p-4 bg-green-100 rounded-lg shadow-inner">
@@ -253,6 +321,7 @@ const AttendanceTracker = ({ username }) => {
         </div>
       );
     }
+
     const breakStartButton = (action, label) => (
       <button
         onClick={() => handleAction(action)}
@@ -269,8 +338,22 @@ const AttendanceTracker = ({ username }) => {
         End {label}
       </button>
     );
+
     if (!break_morning_start) {
-      return breakStartButton("break_morning", "Morning Break");
+      return (
+        <>
+          {checkin_photo && (
+            <div className="flex justify-center mb-2">
+              <img
+                src={checkin_photo}
+                alt="Check-in selfie"
+                className="w-14 h-14 rounded-full object-cover border-2 border-blue-400 shadow"
+              />
+            </div>
+          )}
+          {breakStartButton("break_morning", "Morning Break")}
+        </>
+      );
     }
     if (break_morning_start && !break_morning_end) {
       return (
@@ -317,27 +400,35 @@ const AttendanceTracker = ({ username }) => {
       </button>
     );
   };
+
   return (
-    <div className="flex items-center justify-center p-4">
-      <div className="w-full max-w-sm p-6 bg-white rounded-xl shadow-lg space-y-4">
-        <h2 className="text-xl font-bold text-center text-gray-800">
-          Attendance Tracker
-        </h2>
-        {endBreakNotification && (
-          <div className="animate-pulse bg-red-100 text-red-700 border border-red-300 p-3 rounded-lg text-sm text-center">
-            Your {endBreakNotification.breakName} break is ending in{" "}
-            {formatTime(endBreakNotification.timeToEnd)}!
-          </div>
-        )}
-        {preBreakTime && (
-          <div className="animate-pulse bg-yellow-100 text-yellow-700 border border-yellow-300 p-3 rounded-lg text-sm text-center">
-            {preBreakTime.breakName} break is starting in{" "}
-            {formatTime(preBreakTime.timeToStart)}!
-          </div>
-        )}
-        <div className="pt-2">{renderActionButton()}</div>
+    <>
+      {showCameraModal && (
+        <FaceCaptureModal
+          onCapture={handleFaceCaptured}
+          onClose={() => setShowCameraModal(false)}
+        />
+      )}
+      <div className="flex items-center justify-center p-4">
+        <div className="w-full max-w-sm p-6 bg-white rounded-xl shadow-lg space-y-4">
+          <h2 className="text-xl font-bold text-center text-gray-800">Attendance Tracker</h2>
+          {endBreakNotification && (
+            <div className="animate-pulse bg-red-100 text-red-700 border border-red-300 p-3 rounded-lg text-sm text-center">
+              Your {endBreakNotification.breakName} break is ending in{" "}
+              {formatTime(endBreakNotification.timeToEnd)}!
+            </div>
+          )}
+          {preBreakTime && (
+            <div className="animate-pulse bg-yellow-100 text-yellow-700 border border-yellow-300 p-3 rounded-lg text-sm text-center">
+              {preBreakTime.breakName} break is starting in{" "}
+              {formatTime(preBreakTime.timeToStart)}!
+            </div>
+          )}
+          <div className="pt-2">{renderActionButton()}</div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
+
 export default AttendanceTracker;
