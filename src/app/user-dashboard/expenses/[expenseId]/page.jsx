@@ -145,25 +145,25 @@ export default async function ExpenseDetailPage({ params }) {
           <p className="text-gray-500 italic">No attachments available</p>
         ) : (
           <ul className="list-disc ml-6 space-y-2 text-sm text-blue-700">
-            {attachments.map((filePath, index) => {
-              // The filePath is now directly the relative path like '/expense_attachments/12345-my-file.jpg'
-              // So we can use it directly as the href.
-              const fileName = filePath.split("/").pop(); // Extract just the filename for display
+           {attachments.map((filePath, index) => {
 
-              return (
-                <li key={index}>
-                  <a
-                    href={filePath} // Use the directly provided local path
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline"
-                  >
-                    {/* Display the actual file name for clarity */}
-                    {fileName}
-                  </a>
-                </li>
-              );
-            })}
+  const decodedPath = decodeURIComponent(filePath);   // ✅ ADD THIS LINE
+  const fileName = decodedPath.split("/").pop();      // ✅ Use decoded path
+
+  return (
+    <li key={index}>
+      <a
+        href={decodedPath}     // ✅ Use decodedPath instead of filePath
+        target="_blank"
+        rel="noopener noreferrer"
+        className="hover:underline"
+      >
+        {fileName}
+      </a>
+    </li>
+  );
+})}
+
           </ul>
         )}
       </div>
