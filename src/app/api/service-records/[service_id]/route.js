@@ -121,6 +121,30 @@ export async function GET(request, context) {
 
     const installationData = installationRows.length > 0 ? installationRows[0] : null;
 
+    // Signatures live in service_reports (upserted on every submit); service_records
+    // only gets them when status is COMPLETED — merge so the report page always has paths.
+    const [reportRows] = await db.query(
+      `SELECT authorized_person_sign, customer_sign
+       FROM service_reports WHERE service_id = ? LIMIT 1`,
+      [serviceId]
+    );
+    const reportRow = reportRows[0] || null;
+
+    const pickStr = (a, b) => {
+      const ta = a != null && String(a).trim() !== "" ? String(a).trim() : "";
+      const tb = b != null && String(b).trim() !== "" ? String(b).trim() : "";
+      return ta || tb || null;
+    };
+
+    const mergedRecord = {
+      ...serviceRecord,
+      authorised_person_sign: pickStr(
+        serviceRecord.authorised_person_sign,
+        reportRow?.authorized_person_sign
+      ),
+      customer_sign: pickStr(serviceRecord.customer_sign, reportRow?.customer_sign),
+    };
+
     // ✅ Get warranty product details using serial number
     const serialNumber = serviceRecord.serial_number;
     let warrantyProduct = {};
@@ -138,7 +162,7 @@ export async function GET(request, context) {
     }
 
     return NextResponse.json({
-      record: serviceRecord,
+      record: mergedRecord,
       product: warrantyProduct,
       install: installationData,
     });

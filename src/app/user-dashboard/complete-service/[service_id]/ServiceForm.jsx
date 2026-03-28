@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import SignaturePad from "signature_pad";
 import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
+import { getSignatureImageSrc } from "@/utils/signatureUrl";
+
+const signaturePadBoxClass =
+  "rounded-lg border-2 border-gray-300 bg-gray-50 p-3 mb-4 shadow-sm";
+const signatureCanvasWrapClass =
+  "rounded-md bg-white border border-gray-200 overflow-hidden";
+const signatureCanvasClass =
+  "w-full h-[200px] touch-none cursor-crosshair block";
+const signatureSectionTitleClass =
+  "text-base font-bold text-gray-900 mb-3";
 
 const CHECKLIST_ITEMS = [
   "Voltage (V)",
@@ -69,6 +79,10 @@ const FormInput = ({
 );
 
 export default function ServiceForm({ service }) {
+  const storedEngineerSign =
+    service.authorised_person_sign || service.authorized_person_sign;
+  const storedCustomerSign = service.customer_sign;
+
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -1195,36 +1209,40 @@ export default function ServiceForm({ service }) {
             required
             className="mt-4"
           />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 mb-6">
             {/* Conditional Rendering for PENDING Status */}
             {formData.status !== "COMPLETED" && (
               <>
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 text-sm">
+                  <h3 className={signatureSectionTitleClass}>
                     Authorized Person (Engineer)
                   </h3>
-                  {service.authorized_person_sign ? (
+                  {storedEngineerSign && getSignatureImageSrc(storedEngineerSign) ? (
                     <img
-                      src={`/signatures/${service.authorized_person_sign}`}
+                      src={getSignatureImageSrc(storedEngineerSign)}
                       alt="Authorized Person Signature"
-                      className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                      className="w-full max-h-52 object-contain border-2 border-gray-300 rounded-lg bg-white mb-4 p-2"
                     />
                   ) : (
-                    <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2 engineer-signature-placeholder">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div
+                      className={`${signaturePadBoxClass} engineer-signature-placeholder`}
+                    >
+                      <label className="block text-sm font-medium text-gray-800 mb-2">
                         Signature:
                       </label>
-                      <canvas
-                        ref={engineerCanvasRef}
-                        width="400"
-                        height="200"
-                        className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                      />
+                      <div className={signatureCanvasWrapClass}>
+                        <canvas
+                          ref={engineerCanvasRef}
+                          width="400"
+                          height="200"
+                          className={signatureCanvasClass}
+                        />
+                      </div>
                       <div className="mt-2 flex justify-end no-print">
                         <button
                           type="button"
                           onClick={() => clearSignature("engineer")}
-                          className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           Clear
                         </button>
@@ -1258,31 +1276,33 @@ export default function ServiceForm({ service }) {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 text-sm">
-                    Customer
-                  </h3>
-                  {service.customer_sign ? (
+                  <h3 className={signatureSectionTitleClass}>Customer</h3>
+                  {storedCustomerSign && getSignatureImageSrc(storedCustomerSign) ? (
                     <img
-                      src={`/signatures/${service.customer_sign}`}
+                      src={getSignatureImageSrc(storedCustomerSign)}
                       alt="Customer Signature"
-                      className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                      className="w-full max-h-52 object-contain border-2 border-gray-300 rounded-lg bg-white mb-4 p-2"
                     />
                   ) : (
-                    <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2 customer-signature-placeholder">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div
+                      className={`${signaturePadBoxClass} customer-signature-placeholder`}
+                    >
+                      <label className="block text-sm font-medium text-gray-800 mb-2">
                         Signature:
                       </label>
-                      <canvas
-                        ref={customerCanvasRef}
-                        width="400"
-                        height="200"
-                        className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                      />
+                      <div className={signatureCanvasWrapClass}>
+                        <canvas
+                          ref={customerCanvasRef}
+                          width="400"
+                          height="200"
+                          className={signatureCanvasClass}
+                        />
+                      </div>
                       <div className="mt-2 flex justify-end no-print">
                         <button
                           type="button"
                           onClick={() => clearSignature("customer")}
-                          className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                         >
                           Clear
                         </button>
@@ -1321,24 +1341,26 @@ export default function ServiceForm({ service }) {
             {formData.status === "COMPLETED" && (
               <>
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 text-sm">
+                  <h3 className={signatureSectionTitleClass}>
                     Authorized Person (Engineer)
                   </h3>
-                  <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className={signaturePadBoxClass}>
+                    <label className="block text-sm font-medium text-gray-800 mb-2">
                       Signature:
                     </label>
-                    <canvas
-                      ref={completionEngineerCanvasRef}
-                      width="400"
-                      height="200"
-                      className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                    />
+                    <div className={signatureCanvasWrapClass}>
+                      <canvas
+                        ref={completionEngineerCanvasRef}
+                        width="400"
+                        height="200"
+                        className={signatureCanvasClass}
+                      />
+                    </div>
                     <div className="mt-2 flex justify-end no-print">
                       <button
                         type="button"
                         onClick={() => clearSignature("completion_engineer")}
-                        className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                       >
                         Clear
                       </button>
@@ -1368,24 +1390,24 @@ export default function ServiceForm({ service }) {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 text-sm">
-                    Customer
-                  </h3>
-                  <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <h3 className={signatureSectionTitleClass}>Customer</h3>
+                  <div className={signaturePadBoxClass}>
+                    <label className="block text-sm font-medium text-gray-800 mb-2">
                       Signature:
                     </label>
-                    <canvas
-                      ref={completionCustomerCanvasRef}
-                      width="400"
-                      height="200"
-                      className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                    />
+                    <div className={signatureCanvasWrapClass}>
+                      <canvas
+                        ref={completionCustomerCanvasRef}
+                        width="400"
+                        height="200"
+                        className={signatureCanvasClass}
+                      />
+                    </div>
                     <div className="mt-2 flex justify-end no-print">
                       <button
                         type="button"
                         onClick={() => clearSignature("completion_customer")}
-                        className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                       >
                         Clear
                       </button>

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
+import { getSignatureImageSrc } from "@/utils/signatureUrl";
 import "./print.css";
 
 const CHECKLIST_ITEMS = [
@@ -535,9 +536,9 @@ export default function ViewServiceReport({ params }) {
               <h3 className="text-lg font-semibold mb-3">
                 Authorized Person (Engineer)
               </h3>
-              {report.authorised_person_sign && (
+              {report.authorised_person_sign && getSignatureImageSrc(report.authorised_person_sign) && (
                 <img
-                  src={`/signatures/${report.authorised_person_sign}`}
+                  src={getSignatureImageSrc(report.authorised_person_sign)}
                   alt="Engineer Signature"
                   className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
                 />
@@ -555,9 +556,9 @@ export default function ViewServiceReport({ params }) {
 
             <div>
               <h3 className="text-lg font-semibold mb-3">Customer</h3>
-              {report.customer_sign && (
+              {report.customer_sign && getSignatureImageSrc(report.customer_sign) && (
                 <img
-                  src={`/signatures/${report.customer_sign}`}
+                  src={getSignatureImageSrc(report.customer_sign)}
                   alt="Customer Signature"
                   className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
                 />

@@ -3,6 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import SignaturePad from "signature_pad";
+import { getSignatureImageSrc } from "@/utils/signatureUrl";
+
+const signaturePadBoxClass =
+  "rounded-lg border-2 border-gray-300 bg-gray-50 p-3 mb-4 shadow-sm";
+const signatureCanvasWrapClass =
+  "rounded-md bg-white border border-gray-200 overflow-hidden";
+const signatureCanvasClass =
+  "w-full h-[200px] touch-none cursor-crosshair block";
+const signatureSectionTitleClass = "text-base font-bold text-gray-900 mb-3";
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 
@@ -642,33 +651,40 @@ export default function ServiceReportForm({ initialData }) {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 mb-6">
             <div>
-              <h3 className="text-lg font-semibold mb-3">
+              <h3 className={signatureSectionTitleClass}>
                 Authorized Person (Engineer)
               </h3>
               {submitted && formData.authorized_person_sign ? (
                 <img
-                  src={formData.authorized_person_sign}
+                  src={
+                    getSignatureImageSrc(formData.authorized_person_sign) ||
+                    formData.authorized_person_sign
+                  }
                   alt="Authorized Person Signature"
-                  className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                  className="w-full max-h-52 object-contain border-2 border-gray-300 rounded-lg bg-white mb-4 p-2"
                 />
               ) : (
-                <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2 engineer-signature-placeholder">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div
+                  className={`${signaturePadBoxClass} engineer-signature-placeholder`}
+                >
+                  <label className="block text-sm font-medium text-gray-800 mb-2">
                     Signature:
                   </label>
-                  <canvas
-                    ref={engineerCanvasRef}
-                    width="400"
-                    height="200"
-                    className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                  />
+                  <div className={signatureCanvasWrapClass}>
+                    <canvas
+                      ref={engineerCanvasRef}
+                      width="400"
+                      height="200"
+                      className={signatureCanvasClass}
+                    />
+                  </div>
                   <div className="mt-2 flex justify-end no-print">
                     <button
                       type="button"
                       onClick={() => clearSignature("engineer")}
-                      className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                     >
                       Clear
                     </button>
@@ -702,29 +718,36 @@ export default function ServiceReportForm({ initialData }) {
             </div>
 
             <div>
-              <h3 className="text-lg font-semibold mb-3">Customer</h3>
+              <h3 className={signatureSectionTitleClass}>Customer</h3>
               {submitted && formData.customer_sign ? (
                 <img
-                  src={formData.customer_sign}
+                  src={
+                    getSignatureImageSrc(formData.customer_sign) ||
+                    formData.customer_sign
+                  }
                   alt="Customer Signature"
-                  className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                  className="w-full max-h-52 object-contain border-2 border-gray-300 rounded-lg bg-white mb-4 p-2"
                 />
               ) : (
-                <div className="border border-gray-300 rounded-md mb-4 bg-gray-50 p-2 customer-signature-placeholder">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div
+                  className={`${signaturePadBoxClass} customer-signature-placeholder`}
+                >
+                  <label className="block text-sm font-medium text-gray-800 mb-2">
                     Signature:
                   </label>
-                  <canvas
-                    ref={customerCanvasRef}
-                    width="400"
-                    height="200"
-                    className="w-full border border-gray-400 rounded-md bg-white cursor-crosshair"
-                  />
+                  <div className={signatureCanvasWrapClass}>
+                    <canvas
+                      ref={customerCanvasRef}
+                      width="400"
+                      height="200"
+                      className={signatureCanvasClass}
+                    />
+                  </div>
                   <div className="mt-2 flex justify-end no-print">
                     <button
                       type="button"
                       onClick={() => clearSignature("customer")}
-                      className="text-sm text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
                     >
                       Clear
                     </button>

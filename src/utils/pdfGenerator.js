@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { getSignatureImageSrc } from '@/utils/signatureUrl';
 
 const CHECKLIST_ITEMS = [
   "Voltage (V)",
@@ -421,7 +422,7 @@ const generateHTMLTemplate = (reportData, productData) => {
                             ${reportData.authorised_person_sign_data ? 
       `<img src="${reportData.authorised_person_sign_data}" alt="Engineer Signature" style="max-width: 100%; max-height: 100%;">` :
       (reportData.authorised_person_sign ? 
-        `<img src="/signatures/${reportData.authorised_person_sign}" alt="Engineer Signature" style="max-width: 100%; max-height: 100%;">` :
+        `<img src="${getSignatureImageSrc(reportData.authorised_person_sign)}" alt="Engineer Signature" style="max-width: 100%; max-height: 100%;">` :
         'Signature')
     }
                         </div>
@@ -438,7 +439,7 @@ const generateHTMLTemplate = (reportData, productData) => {
                             ${reportData.customer_sign_data ? 
       `<img src="${reportData.customer_sign_data}" alt="Customer Signature" style="max-width: 100%; max-height: 100%;">` :
       (reportData.customer_sign ? 
-        `<img src="/signatures/${reportData.customer_sign}" alt="Customer Signature" style="max-width: 100%; max-height: 100%;">` :
+        `<img src="${getSignatureImageSrc(reportData.customer_sign)}" alt="Customer Signature" style="max-width: 100%; max-height: 100%;">` :
         'Signature')
     }
                         </div>
