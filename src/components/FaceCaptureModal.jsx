@@ -153,17 +153,25 @@ const FaceCaptureModal = ({ onCapture, onClose }) => {
     const video = videoRef.current;
     if (!video) return;
 
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const maxEdge = 960;
+    const scale = Math.min(1, maxEdge / Math.max(vw, vh));
+    const outW = Math.round(vw * scale);
+    const outH = Math.round(vh * scale);
+
     const capture = document.createElement("canvas");
-    capture.width = video.videoWidth;
-    capture.height = video.videoHeight;
+    capture.width = outW;
+    capture.height = outH;
     const ctx = capture.getContext("2d");
 
     // Mirror the capture to match what the user sees
     ctx.translate(capture.width, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, outW, outH);
 
-    const base64 = capture.toDataURL("image/jpeg", 0.82);
+    // Smaller payload avoids proxy/body limits and faster mobile upload
+    const base64 = capture.toDataURL("image/jpeg", 0.72);
 
     // Stop camera stream
     if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());

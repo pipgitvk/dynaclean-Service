@@ -111,11 +111,16 @@ const AttendanceTracker = ({ username }) => {
           checkin_photo: base64Photo,
         }),
       });
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
         fetchAttendance();
       } else {
-        console.error("Failed to check in");
-        alert("Check-in failed. Please try again.");
+        console.error("Failed to check in", data);
+        alert(
+          typeof data?.error === "string" && data.error.length > 0
+            ? data.error
+            : "Check-in failed. Please try again."
+        );
       }
     } catch (error) {
       console.error("API call failed:", error);

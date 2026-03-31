@@ -36,10 +36,11 @@ const getReverseGeocode = async (lat, lon) => {
 };
 
 const uploadPhotoToCloudinary = async (base64Image, username, date) => {
+  const safePublicId = `${String(username).replace(/[^a-zA-Z0-9_-]/g, "_")}_${date}`;
   try {
     const result = await cloudinary.uploader.upload(base64Image, {
       folder: "attendance/checkin",
-      public_id: `${username}_${date}`,
+      public_id: safePublicId,
       overwrite: true,
       resource_type: "image",
       transformation: [{ width: 640, height: 480, crop: "limit", quality: "auto" }],
@@ -96,8 +97,28 @@ export async function POST(req) {
           );
         }
 
-        // Upload face photo to Cloudinary
+        if (
+          !process.env.CLOUDINARY_CLOUD_NAME ||
+          !process.env.CLOUDINARY_API_KEY ||
+          !process.env.CLOUDINARY_API_SECRET
+        ) {
+          console.error("Attendance check-in: Cloudinary env vars are not set");
+          return NextResponse.json(
+            { error: "Photo upload is not configured on the server. Contact administrator." },
+            { status: 503 }
+          );
+        }
+
         const photoUrl = await uploadPhotoToCloudinary(checkin_photo, username, today);
+        if (!photoUrl) {
+          return NextResponse.json(
+            {
+              error:
+                "Could not save your check-in photo. Please try again with better network, or contact support if this continues.",
+            },
+            { status: 502 }
+          );
+        }
 
         await conn.execute(
           "INSERT INTO attendance_logs (username, date, checkin_time, checkin_latitude, checkin_longitude, checkin_address, checkin_photo) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -163,6 +184,12 @@ export async function POST(req) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error?.code === "ER_DUP_ENTRY") {
+      return NextResponse.json(
+        { error: "You have already checked in today. Refresh the page to see your status." },
+        { status: 409 }
+      );
+    }
     console.error("Database error:", error);
     return NextResponse.json({ error: "Failed to perform action" }, { status: 500 });
   } finally {
