@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 import Link from "next/link";
 import dayjs from "dayjs";
 import ApproveModal from "@/components/expenses/ApproveModal";
+import { normalizeAttachmentUrl } from "@/lib/expenseAttachments";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,11 @@ export default async function ExpenseDetailPage({ params }) {
 
   // Split attachments string by comma and filter out any empty strings
   // This assumes the attachments are stored as '/path1.jpg, /path2.pdf'
-  const attachments = expense.attachments?.split(", ").filter(Boolean) || [];
+  const attachments =
+    expense.attachments
+      ?.split(",")
+      .map((item) => normalizeAttachmentUrl(item))
+      .filter(Boolean) || [];
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6">
@@ -145,25 +150,25 @@ export default async function ExpenseDetailPage({ params }) {
           <p className="text-gray-500 italic">No attachments available</p>
         ) : (
           <ul className="list-disc ml-6 space-y-2 text-sm text-blue-700">
-           {attachments.map((filePath, index) => {
+            {attachments.map((filePath, index) => {
+              const fileName = decodeURIComponent(filePath)
+                .split("/")
+                .pop()
+                ?.replace(/^(\d+-)/, "");
 
-  const decodedPath = decodeURIComponent(filePath);   // ✅ ADD THIS LINE
-  const fileName = decodedPath.split("/").pop();      // ✅ Use decoded path
-
-  return (
-    <li key={index}>
-      <a
-        href={decodedPath}     // ✅ Use decodedPath instead of filePath
-        target="_blank"
-        rel="noopener noreferrer"
-        className="hover:underline"
-      >
-        {fileName}
-      </a>
-    </li>
-  );
-})}
-
+              return (
+                <li key={index}>
+                  <a
+                    href={filePath}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
+                    {fileName || `Attachment ${index + 1}`}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

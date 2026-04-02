@@ -94,8 +94,13 @@ import { getDbConnection } from "@/lib/db";
 import { jwtVerify } from "jose";
 import fs from "fs/promises"; // For asynchronous file operations
 import path from "path"; // For path manipulation
+import {
+  buildAttachmentApiUrl,
+  buildAttachmentFileName,
+  getExpenseAttachmentsDir,
+} from "@/lib/expenseAttachments";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "expense_attachments");
+const UPLOAD_DIR = getExpenseAttachmentsDir();
 
 export async function POST(req) {
   try {
@@ -121,13 +126,13 @@ export async function POST(req) {
       if (file instanceof File) {
         const buffer = Buffer.from(await file.arrayBuffer());
         // Create a unique filename to prevent clashes
-        const fileName = `${Date.now()}-${file.name}`;
+        const fileName = buildAttachmentFileName(file.name);
         const filePath = path.join(UPLOAD_DIR, fileName);
 
         await fs.writeFile(filePath, buffer);
         console.log(`✅ File saved locally: ${filePath}`);
-        // Store the public URL path that can be accessed from the browser
-        savedFilePaths.push(`/expense_attachments/${fileName}`);
+        // Store API URL so serving is stable across environments
+        savedFilePaths.push(buildAttachmentApiUrl(fileName));
       } else {
         console.warn("⚠️ Skipped non-file attachment:", file);
       }

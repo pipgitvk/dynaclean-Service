@@ -1,6 +1,14 @@
 import { getDbConnection } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import {
+  buildAttachmentApiUrl,
+  buildAttachmentFileName,
+  getExpenseAttachmentsDir,
+  normalizeAttachmentUrl,
+} from "@/lib/expenseAttachments";
+
+const UPLOAD_DIR = getExpenseAttachmentsDir();
 
 export async function PUT(req, { params }) {
   try {
@@ -32,25 +40,27 @@ export async function PUT(req, { params }) {
         const buffer = Buffer.from(bytes);
 
         // Create unique filename
-        const timestamp = Date.now();
-        const filename = `${timestamp}-${file.name}`;
-        const path = join(process.cwd(), "public", "attachments", filename);
+        const filename = buildAttachmentFileName(file.name);
+        const filePath = join(UPLOAD_DIR, filename);
 
         // Ensure directory exists
-        await mkdir(join(process.cwd(), "public", "attachments"), {
-          recursive: true,
-        });
+        await mkdir(UPLOAD_DIR, { recursive: true });
 
         // Write file
-        await writeFile(path, buffer);
-        newAttachments.push(`/attachments/${filename}`);
+        await writeFile(filePath, buffer);
+        newAttachments.push(buildAttachmentApiUrl(filename));
       }
     }
 
     // Combine existing and new attachments
     const allAttachments = [];
     if (existingAttachments) {
-      allAttachments.push(...existingAttachments.split(", ").filter(Boolean));
+      allAttachments.push(
+        ...existingAttachments
+          .split(",")
+          .map((item) => normalizeAttachmentUrl(item))
+          .filter(Boolean),
+      );
     }
     allAttachments.push(...newAttachments);
     const finalAttachments = allAttachments.join(", ");
