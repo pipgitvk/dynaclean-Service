@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
-import { jwtVerify } from "jose";
 import {
   getExpenseAttachmentsDir,
   sanitizeAttachmentFilename,
 } from "@/lib/expenseAttachments";
-
-const SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 function getContentType(fileName) {
   const ext = path.extname(fileName).toLowerCase();
@@ -20,13 +17,6 @@ function getContentType(fileName) {
 
 export async function GET(req, { params }) {
   try {
-    const token = req.cookies.get("token")?.value;
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    await jwtVerify(token, SECRET);
-
     const rawName = decodeURIComponent((await params).fileName || "");
     const fileName = sanitizeAttachmentFilename(rawName);
     const candidatePaths = [
@@ -53,7 +43,7 @@ export async function GET(req, { params }) {
       status: 200,
       headers: {
         "Content-Type": getContentType(fileName),
-        "Cache-Control": "private, max-age=604800, immutable",
+        "Cache-Control": "public, max-age=604800, immutable",
       },
     });
   } catch (error) {
