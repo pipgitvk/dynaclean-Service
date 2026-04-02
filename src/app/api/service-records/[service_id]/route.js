@@ -85,6 +85,14 @@
 import { NextResponse } from "next/server";
 import { getDbConnection } from "@/lib/db";
 
+/** Always read fresh DB + avoid CDN/proxy caching stale signatures after save */
+export const dynamic = "force-dynamic";
+
+const noStoreHeaders = {
+  "Cache-Control": "private, no-store, no-cache, must-revalidate",
+  Pragma: "no-cache",
+};
+
 export async function GET(request, context) {
   try {
     const { params } = await context;
@@ -136,13 +144,15 @@ export async function GET(request, context) {
       return ta || tb || null;
     };
 
+    // Prefer service_reports first — it is upserted on every submit with latest signature filenames.
+    // service_records can lag or hold older paths in some edge cases; fixes "signatures missing until pm2 restart".
     const mergedRecord = {
       ...serviceRecord,
       authorised_person_sign: pickStr(
-        serviceRecord.authorised_person_sign,
-        reportRow?.authorized_person_sign
+        reportRow?.authorized_person_sign,
+        serviceRecord.authorised_person_sign
       ),
-      customer_sign: pickStr(serviceRecord.customer_sign, reportRow?.customer_sign),
+      customer_sign: pickStr(reportRow?.customer_sign, serviceRecord.customer_sign),
     };
 
     // ✅ Get warranty product details using serial number
@@ -161,16 +171,19 @@ export async function GET(request, context) {
       warrantyProduct = warrantyRows.length > 0 ? warrantyRows[0] : {};
     }
 
-    return NextResponse.json({
-      record: mergedRecord,
-      product: warrantyProduct,
-      install: installationData,
-    });
+    return NextResponse.json(
+      {
+        record: mergedRecord,
+        product: warrantyProduct,
+        install: installationData,
+      },
+      { headers: noStoreHeaders }
+    );
   } catch (error) {
     console.error("Error fetching service record:", error);
     return NextResponse.json(
       { error: "Failed to fetch service record" },
-      { status: 500 }
+      { status: 500, headers: noStoreHeaders }
     );
   }
 }

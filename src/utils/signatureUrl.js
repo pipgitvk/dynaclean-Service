@@ -12,3 +12,11 @@ export function getSignatureImageSrc(raw) {
   if (s.startsWith("signatures/")) return `/${s}`;
   return `/signatures/${s}`;
 }
+
+/** Same URL as getSignatureImageSrc but with ?v= so browsers/proxies don't serve a stale image after re-save */
+export function getSignatureImageSrcNoCache(raw) {
+  const base = getSignatureImageSrc(raw);
+  if (!base) return null;
+  const v = encodeURIComponent(String(raw).trim());
+  return `${base}${base.includes("?") ? "&" : "?"}v=${v}`;
+}
