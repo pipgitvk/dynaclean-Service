@@ -1,6 +1,9 @@
 "use client";
 import { useRef, useState, useEffect, useCallback } from "react";
 
+/** Minimum face width as fraction of frame width (12% = easier check-in) */
+const MIN_FACE_COVERAGE = 0.12;
+
 const FaceCaptureModal = ({ onCapture, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -109,13 +112,13 @@ const FaceCaptureModal = ({ onCapture, onClose }) => {
           const pct = Math.round(coverage * 100);
           setFaceCoveragePercent(pct);
 
-          const isValid = coverage >= 0.5;
+          const isValid = coverage >= MIN_FACE_COVERAGE;
           setFaceDetected(isValid);
 
           if (isValid) {
             setStatusMsg("Face detected! Tap Capture.");
           } else {
-            setStatusMsg(`Move closer — face covers ${pct}% (need 50%+)`);
+            setStatusMsg(`Move closer — face covers ${pct}% (need 12%+)`);
           }
 
           // Draw bounding box
@@ -240,7 +243,7 @@ const FaceCaptureModal = ({ onCapture, onClose }) => {
           </p>
           {!modelError && (
             <p className="text-center text-xs text-gray-400 mt-0.5">
-              Face must be &gt;50% of frame to check in
+              Face must be at least 12% of frame width to check in
             </p>
           )}
         </div>

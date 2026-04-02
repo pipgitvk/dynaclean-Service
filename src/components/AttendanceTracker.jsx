@@ -317,7 +317,10 @@ const AttendanceTracker = ({ username }) => {
       break_evening_end,
       checkout_time,
       checkin_photo,
+      checkin_photo_url,
     } = attendanceData;
+
+    const checkinPhotoSrc = checkin_photo_url || checkin_photo;
 
     if (checkout_time) {
       return (
@@ -347,10 +350,10 @@ const AttendanceTracker = ({ username }) => {
     if (!break_morning_start) {
       return (
         <>
-          {checkin_photo && (
+          {checkinPhotoSrc && (
             <div className="flex justify-center mb-2">
               <img
-                src={checkin_photo}
+                src={checkinPhotoSrc}
                 alt="Check-in selfie"
                 className="w-14 h-14 rounded-full object-cover border-2 border-blue-400 shadow"
               />

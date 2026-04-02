@@ -1,6 +1,7 @@
 // src/app/api/attendance/route.js
 
 import { getDbConnection } from "@/lib/db";
+import { ensureCheckinPhotoColumnStoresLongUrls } from "@/lib/ensureAttendanceSchema";
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -120,6 +121,7 @@ export async function POST(req) {
           );
         }
 
+        await ensureCheckinPhotoColumnStoresLongUrls(conn);
         await conn.execute(
           "INSERT INTO attendance_logs (username, date, checkin_time, checkin_latitude, checkin_longitude, checkin_address, checkin_photo) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [username, today, now, latitude, longitude, locationAddress, photoUrl]
@@ -184,14 +186,30 @@ export async function POST(req) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    if (error?.code === "ER_DUP_ENTRY") {
+    if (error?.code === "ER_DUP_ENTRY" || error?.errno === 1062) {
       return NextResponse.json(
         { error: "You have already checked in today. Refresh the page to see your status." },
         { status: 409 }
       );
     }
-    console.error("Database error:", error);
-    return NextResponse.json({ error: "Failed to perform action" }, { status: 500 });
+    if (error?.code === "ER_DATA_TOO_LONG" || error?.errno === 1406) {
+      console.error("Attendance: URL or value too long for column", error);
+      return NextResponse.json(
+        {
+          error:
+            "Check-in could not be saved: database field is too small for the photo link. Ask admin to set attendance_logs.checkin_photo to TEXT.",
+        },
+        { status: 500 }
+      );
+    }
+    console.error("Attendance POST error:", error?.code, error?.errno, error?.message, error);
+    return NextResponse.json(
+      {
+        error:
+          "Could not save check-in. Please try again. If it keeps failing, contact support with the time of this attempt.",
+      },
+      { status: 500 }
+    );
   } finally {
     console.log("Database connection closed.");
   }
