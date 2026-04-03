@@ -7,6 +7,10 @@ import {
   getExpenseAttachmentsDir,
   normalizeAttachmentUrl,
 } from "@/lib/expenseAttachments";
+import {
+  isExpenseCloudinaryEnabled,
+  uploadExpenseBufferToCloudinary,
+} from "@/lib/expenseCloudinaryUpload";
 
 const UPLOAD_DIR = getExpenseAttachmentsDir();
 
@@ -39,16 +43,25 @@ export async function PUT(req, { params }) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
-        // Create unique filename
-        const filename = buildAttachmentFileName(file.name);
-        const filePath = join(UPLOAD_DIR, filename);
+        let storedUrl = null;
 
-        // Ensure directory exists
-        await mkdir(UPLOAD_DIR, { recursive: true });
+        if (isExpenseCloudinaryEnabled()) {
+          try {
+            storedUrl = await uploadExpenseBufferToCloudinary(buffer, file.name);
+          } catch (cloudErr) {
+            console.error("Cloudinary expense upload failed, using local storage:", cloudErr);
+          }
+        }
 
-        // Write file
-        await writeFile(filePath, buffer);
-        newAttachments.push(buildAttachmentApiUrl(filename));
+        if (!storedUrl) {
+          const filename = buildAttachmentFileName(file.name);
+          const filePath = join(UPLOAD_DIR, filename);
+          await mkdir(UPLOAD_DIR, { recursive: true });
+          await writeFile(filePath, buffer);
+          storedUrl = buildAttachmentApiUrl(filename);
+        }
+
+        newAttachments.push(storedUrl);
       }
     }
 

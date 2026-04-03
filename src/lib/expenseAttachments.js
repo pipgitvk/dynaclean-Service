@@ -28,10 +28,15 @@ export function normalizeAttachmentUrl(value = "") {
   const trimmed = String(value).trim();
   if (!trimmed) return "";
 
+  // Cloudinary / any absolute URL — works on every domain (shared DB)
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
   if (trimmed.startsWith("/api/expense-attachments/")) {
     return trimmed;
   }
 
-  const baseName = path.basename(trimmed);
+  const baseName = path.basename(trimmed.split("?")[0]);
   return buildAttachmentApiUrl(baseName);
 }

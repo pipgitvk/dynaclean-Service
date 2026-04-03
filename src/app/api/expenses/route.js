@@ -99,6 +99,10 @@ import {
   buildAttachmentFileName,
   getExpenseAttachmentsDir,
 } from "@/lib/expenseAttachments";
+import {
+  isExpenseCloudinaryEnabled,
+  uploadExpenseBufferToCloudinary,
+} from "@/lib/expenseCloudinaryUpload";
 
 const UPLOAD_DIR = getExpenseAttachmentsDir();
 
@@ -118,21 +122,33 @@ export async function POST(req) {
 
     const savedFilePaths = [];
 
-    // Ensure the upload directory exists
+    // Ensure the upload directory exists (local fallback)
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
     for (const file of attachments) {
       // Check if 'file' is actually a File object and not a string or other data
       if (file instanceof File) {
         const buffer = Buffer.from(await file.arrayBuffer());
-        // Create a unique filename to prevent clashes
-        const fileName = buildAttachmentFileName(file.name);
-        const filePath = path.join(UPLOAD_DIR, fileName);
+        let storedUrl = null;
 
-        await fs.writeFile(filePath, buffer);
-        console.log(`✅ File saved locally: ${filePath}`);
-        // Store API URL so serving is stable across environments
-        savedFilePaths.push(buildAttachmentApiUrl(fileName));
+        if (isExpenseCloudinaryEnabled()) {
+          try {
+            storedUrl = await uploadExpenseBufferToCloudinary(buffer, file.name);
+            console.log("✅ Expense attachment uploaded to Cloudinary");
+          } catch (cloudErr) {
+            console.error("Cloudinary expense upload failed, using local storage:", cloudErr);
+          }
+        }
+
+        if (!storedUrl) {
+          const fileName = buildAttachmentFileName(file.name);
+          const filePath = path.join(UPLOAD_DIR, fileName);
+          await fs.writeFile(filePath, buffer);
+          console.log(`✅ File saved locally: ${filePath}`);
+          storedUrl = buildAttachmentApiUrl(fileName);
+        }
+
+        savedFilePaths.push(storedUrl);
       } else {
         console.warn("⚠️ Skipped non-file attachment:", file);
       }
