@@ -57,7 +57,7 @@ function sessionAccountIdentity(session) {
   const username = typeof session.username === "string" ? session.username.trim() : "";
   const empId = session.empId ?? session.id ?? null;
   return { username, empId };
-}
+} 
 
 function submissionBelongsToSessionRow(sub, session) {
   const { username, empId } = sessionAccountIdentity(session);
@@ -137,6 +137,64 @@ function buildSessionSubmissionOwnerWhere(session) {
   }
   if (parts.length === 0) return null;
   return { clause: `(${parts.join(" OR ")})`, params };
+}
+
+/** For approvals detail screen: ensure payload has full data even when DB row was partially saved. */
+async function hydrateSubmissionForPreview(conn, submission) {
+  if (!submission || !submission.username) return submission;
+
+  let payload = parseMaybeJson(submission.payload, {});
+  if (!payload || typeof payload !== "object") payload = {};
+  const data = payload.data && typeof payload.data === "object" ? payload.data : {};
+  let references = Array.isArray(payload.references) ? payload.references : [];
+  let education = Array.isArray(payload.education) ? payload.education : [];
+  let experience = Array.isArray(payload.experience) ? payload.experience : [];
+
+  const [existing] = await conn.execute(`SELECT * FROM employee_profiles WHERE username = ? LIMIT 1`, [
+    submission.username,
+  ]);
+  const existingRow = existing[0] || {};
+  const profileId = existingRow?.id || null;
+
+  const mergedData = mergePayloadDataPreferNonEmpty(existingRow, data);
+
+  if (profileId) {
+    if (!referencesPayloadHasContent(references)) {
+      const [rrows] = await conn.execute(`SELECT * FROM employee_references WHERE profile_id = ?`, [profileId]);
+      if (rrows.length) references = mapDbReferencesToPayload(rrows);
+    }
+    if (!educationPayloadHasContent(education)) {
+      const [erows] = await conn.execute(
+        `SELECT * FROM employee_education WHERE profile_id = ? ORDER BY display_order, year_of_passing DESC`,
+        [profileId],
+      );
+      if (erows.length) education = mapDbEducationToPayload(erows);
+    }
+    if (!experiencePayloadHasContent(experience)) {
+      const [xrows] = await conn.execute(
+        `SELECT * FROM employee_experience WHERE profile_id = ? ORDER BY display_order, period_from DESC`,
+        [profileId],
+      );
+      if (xrows.length) experience = mapDbExperienceToPayload(xrows);
+    }
+  }
+
+  let uploaded = parseMaybeJson(submission.uploaded_files, []);
+  if (!Array.isArray(uploaded)) uploaded = [];
+  let existingDocs = parseMaybeJson(existingRow.joining_form_documents, []);
+  if (!Array.isArray(existingDocs)) existingDocs = [];
+  const mergedUploaded = [...new Set([...(existingDocs || []), ...(uploaded || [])])];
+
+  return {
+    ...submission,
+    uploaded_files: JSON.stringify(mergedUploaded),
+    payload: JSON.stringify({
+      data: mergedData,
+      references,
+      education,
+      experience,
+    }),
+  };
 }
 
 // Utility helpers
@@ -219,6 +277,7 @@ export async function GET(request) {
       }
       if (rows.length && isEmpcrmProfileAdmin(session)) {
         rows = [await maybeRepairBlankSubmissionStatus(conn, rows[0])];
+        rows = [await hydrateSubmissionForPreview(conn, rows[0])];
       }
       return NextResponse.json({ success: true, submissions: rows });
     }
