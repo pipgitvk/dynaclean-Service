@@ -166,6 +166,103 @@ async function syncSubmissionStatus(conn, { username, empId, status, actedBy }) 
   );
 }
 
+/**
+ * Keep empcrm queue table in sync as well (employee_profile_submissions, plural).
+ * This is used by dhynaclean_crm-style approval flow.
+ */
+async function insertEmpcrmSubmissionQueueRow(
+  conn,
+  { username, empId, payload, uploadedFiles, submittedBy, status = "pending" },
+) {
+  const subCols = await loadTableColumnSet(conn, "employee_profile_submissions");
+  if (subCols.size === 0) return;
+
+  const cols = [];
+  const vals = [];
+  if (subCols.has("username")) {
+    cols.push("`username`");
+    vals.push(username);
+  }
+  if (subCols.has("empId")) {
+    cols.push("`empId`");
+    vals.push(empId ?? null);
+  } else if (subCols.has("emp_id")) {
+    cols.push("`emp_id`");
+    vals.push(empId ?? null);
+  }
+  if (subCols.has("status")) {
+    cols.push("`status`");
+    vals.push(status);
+  }
+  if (subCols.has("payload")) {
+    cols.push("`payload`");
+    vals.push(JSON.stringify(payload || {}));
+  }
+  if (subCols.has("uploaded_files")) {
+    cols.push("`uploaded_files`");
+    vals.push(JSON.stringify(Array.isArray(uploadedFiles) ? uploadedFiles : []));
+  }
+  if (subCols.has("submitted_by")) {
+    cols.push("`submitted_by`");
+    vals.push(submittedBy || username);
+  }
+  if (cols.length === 0) return;
+
+  await conn.execute(
+    `INSERT INTO employee_profile_submissions (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`,
+    vals,
+  );
+}
+
+/** Reassign/resubmit handling for empcrm submissions table. */
+async function syncEmpcrmSubmissionQueueOnEmployeeSave(
+  conn,
+  { username, empId, payload, uploadedFiles, submittedBy, status = "pending" },
+) {
+  const subCols = await loadTableColumnSet(conn, "employee_profile_submissions");
+  if (!subCols.size || !subCols.has("status")) return;
+
+  const latestSub = await loadLatestEmpcrmSubmissionRow(conn, username, empId);
+  const latestStatus = String(latestSub?.status || "").trim().toLowerCase();
+  const canResubmitInPlace =
+    (latestStatus === "reassign" || latestStatus === "revision_requested") &&
+    subCols.has("id") &&
+    latestSub?.id != null;
+
+  if (!canResubmitInPlace) {
+    await insertEmpcrmSubmissionQueueRow(conn, { username, empId, payload, uploadedFiles, submittedBy, status });
+    return;
+  }
+
+  const setParts = [];
+  const vals = [];
+  setParts.push("`status` = ?");
+  vals.push(status);
+  if (subCols.has("payload")) {
+    setParts.push("`payload` = ?");
+    vals.push(JSON.stringify(payload || {}));
+  }
+  if (subCols.has("uploaded_files")) {
+    setParts.push("`uploaded_files` = ?");
+    vals.push(JSON.stringify(Array.isArray(uploadedFiles) ? uploadedFiles : []));
+  }
+  if (subCols.has("submitted_by")) {
+    setParts.push("`submitted_by` = ?");
+    vals.push(submittedBy || username);
+  }
+  if (subCols.has("submitted_at")) setParts.push("`submitted_at` = NOW()");
+  if (subCols.has("reviewed_by")) setParts.push("`reviewed_by` = NULL");
+  if (subCols.has("reviewed_at")) setParts.push("`reviewed_at` = NULL");
+  if (subCols.has("rejection_reason")) setParts.push("`rejection_reason` = NULL");
+  if (subCols.has("pending_assignee_username")) setParts.push("`pending_assignee_username` = NULL");
+  vals.push(latestSub.id);
+
+  await conn.execute(
+    `UPDATE employee_profile_submissions SET ${setParts.join(", ")} WHERE id = ? LIMIT 1`,
+    vals,
+  );
+}
+
 function serializeRow(row) {
   if (!row) return null;
   const out = { ...row };
@@ -287,6 +384,41 @@ async function mergeEducationFromChildTable(conn, profile, columnSet) {
   profile[ejCol] = JSON.stringify(mapped);
 }
 
+/** Latest empcrm submission row (status + reassign metadata) */
+async function loadLatestEmpcrmSubmissionRow(conn, username, empId) {
+  const subCols = await loadTableColumnSet(conn, "employee_profile_submissions");
+  if (!subCols.size || !subCols.has("status")) return null;
+
+  const where = [];
+  const vals = [];
+  if (subCols.has("username") && username) {
+    where.push("username = ?");
+    vals.push(username);
+  }
+  const subEmpCol = subCols.has("empId") ? "empId" : subCols.has("emp_id") ? "emp_id" : null;
+  if (subEmpCol && empId != null && empId !== "") {
+    where.push(`\`${subEmpCol}\` = ?`);
+    vals.push(empId);
+  }
+  if (where.length === 0) return null;
+
+  const orderCol = subCols.has("id")
+    ? "id"
+    : subCols.has("submitted_at")
+      ? "submitted_at"
+      : null;
+  const orderBy = orderCol ? ` ORDER BY \`${orderCol}\` DESC` : "";
+  const selectCols = ["status"];
+  if (subCols.has("id")) selectCols.push("id");
+  if (subCols.has("reassignment_note")) selectCols.push("reassignment_note");
+  if (subCols.has("reassigned_fields")) selectCols.push("reassigned_fields");
+  const [rows] = await conn.execute(
+    `SELECT ${selectCols.map((c) => `\`${c}\``).join(", ")} FROM employee_profile_submissions WHERE ${where.join(" OR ")}${orderBy} LIMIT 1`,
+    vals,
+  );
+  return rows[0] ?? null;
+}
+
 export async function GET(req) {
   try {
     const username = await getSessionUsername(req);
@@ -335,6 +467,18 @@ export async function GET(req) {
     if (profile) {
       enrichProfileWithDocStorage(profile);
       await mergeEducationFromChildTable(conn, profile, columnSet);
+      const approvalCol = resolveDbColumn("profile_approval_status", columnSet);
+      if (!approvalCol) {
+        const latestSub = await loadLatestEmpcrmSubmissionRow(conn, username, empId);
+        const fallbackStatus = latestSub?.status != null ? String(latestSub.status).trim() : "";
+        if (fallbackStatus) {
+          // Client reads this logical key first (getProfileApprovalStatus in MyProfileForm).
+          profile.profile_approval_status = fallbackStatus;
+        }
+        if (latestSub?.id != null) profile.latest_submission_id = latestSub.id;
+        if (latestSub?.reassignment_note != null) profile.reassignment_note = latestSub.reassignment_note;
+        if (latestSub?.reassigned_fields != null) profile.reassigned_fields = latestSub.reassigned_fields;
+      }
     }
     return NextResponse.json({ profile, username, empId, columns: [...columnSet] });
   } catch (e) {
@@ -417,11 +561,18 @@ export async function PUT(req) {
     const existingRowForLock = await fetchExistingProfileRow(conn, username, empId, columnSet);
     if (existingRowForLock) {
       const st = getProfileApprovalStatusFromRow(existingRowForLock, columnSet);
-      if (st !== "rejected") {
+      const latestSubForLock = await loadLatestEmpcrmSubmissionRow(conn, username, empId);
+      const subSt = String(latestSubForLock?.status || "").trim().toLowerCase();
+      const allowEdit =
+        st === "rejected" ||
+        subSt === "rejected" ||
+        subSt === "reassign" ||
+        subSt === "revision_requested";
+      if (!allowEdit) {
         return NextResponse.json(
           {
             error:
-              "Profile already saved. You can edit only after HR rejects it so you can resubmit corrections.",
+              "Profile already saved. You can edit only after HR rejects/reassigns it so you can resubmit corrections.",
           },
           { status: 403 },
         );
@@ -433,6 +584,7 @@ export async function PUT(req) {
     const joinCol = resolveFileDbColumn("joining_form_documents", columnSet);
 
     const updates = {};
+    const submissionUploadedFiles = [];
     const joiningFiles = [];
     const unmappedUploadedDocs = {};
     /** doc_* uploads (app.dynaclean style) → merge into joining_form_documents + documents_submitted */
@@ -447,6 +599,7 @@ export async function PUT(req) {
           const buffer = Buffer.from(await value.arrayBuffer());
           const url = await uploadEmployeeProfileDocument(buffer, value.name, username);
           docEmpcrmUploads.push({ docKey: logicalKey, url });
+          submissionUploadedFiles.push(url);
           continue;
         }
 
@@ -459,10 +612,12 @@ export async function PUT(req) {
         const url = await uploadEmployeeProfileDocument(buffer, value.name, username);
         if (dbCol) {
           updates[dbCol] = url;
+          submissionUploadedFiles.push(url);
           continue;
         }
         if (documentsSubmittedCol) {
           unmappedUploadedDocs[logicalKey] = url;
+          submissionUploadedFiles.push(url);
         }
         continue;
       }
@@ -563,7 +718,9 @@ export async function PUT(req) {
       const uploaded = [];
       for (const f of joiningFiles) {
         const buffer = Buffer.from(await f.arrayBuffer());
-        uploaded.push(await uploadEmployeeProfileDocument(buffer, f.name, username));
+        const uploadedUrl = await uploadEmployeeProfileDocument(buffer, f.name, username);
+        uploaded.push(uploadedUrl);
+        submissionUploadedFiles.push(uploadedUrl);
       }
       const nextStr = JSON.stringify([...prev, ...uploaded]);
       if (joinCol) {
@@ -746,6 +903,26 @@ export async function PUT(req) {
         actedBy: username,
       });
     }
+
+    // Also write into employee_profile_submissions (plural) so empcrm approval queue gets this submission.
+    const [latestProfileRows] = await conn.execute(
+      `SELECT * FROM employee_profiles WHERE username = ? LIMIT 1`,
+      [username],
+    );
+    const latestProfile = serializeRow(latestProfileRows[0] ?? null) || {};
+    await syncEmpcrmSubmissionQueueOnEmployeeSave(conn, {
+      username,
+      empId,
+      submittedBy: username,
+      status: "pending",
+      uploadedFiles: submissionUploadedFiles,
+      payload: {
+        data: latestProfile,
+        references: Array.isArray(refRows) ? refRows : [],
+        education: Array.isArray(eduRows) ? eduRows : [],
+        experience: Array.isArray(expRows) ? expRows : [],
+      },
+    });
 
     return NextResponse.json({ success: true });
   } catch (e) {

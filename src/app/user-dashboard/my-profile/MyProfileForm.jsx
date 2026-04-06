@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
@@ -21,7 +21,7 @@ function hasPersistedProfileRow(saved) {
  */
 function isProfileLockedFromServer(saved) {
   const st = String(getProfileApprovalStatus(saved) || "").toLowerCase();
-  if (st === "rejected") return false;
+  if (st === "rejected" || st === "reassign" || st === "revision_requested") return false;
   return hasPersistedProfileRow(saved);
 }
 
@@ -72,6 +72,54 @@ function getProfileApprovalStatus(saved) {
     ""
   );
 }
+
+/** Employee-side statuses before final approval */
+const IN_REVIEW_STATUSES = new Set(["pending", "pending_hr_docs", "pending_admin"]);
+
+function isInReviewStatus(statusLower) {
+  return IN_REVIEW_STATUSES.has(String(statusLower || "").toLowerCase());
+}
+
+function getInReviewStatusLabel(statusLower) {
+  const st = String(statusLower || "").toLowerCase();
+  if (st === "pending_admin") return "Admin approval pending";
+  if (st === "pending_hr_docs") return "HR details in progress";
+  if (st === "pending") return "HR approval pending";
+  if (st === "reassign" || st === "revision_requested") return "Corrections requested by HR";
+  return "HR approval pending";
+}
+
+function getInReviewStatusModal(statusLower) {
+  const st = String(statusLower || "").toLowerCase();
+  if (st === "pending_admin") return "pending_admin";
+  if (st === "pending_hr_docs") return "pending_hr_docs";
+  return "pending";
+}
+
+function parseReassignedFieldKeys(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map((x) => String(x || "").trim()).filter(Boolean);
+  if (typeof raw === "string") {
+    try {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) return p.map((x) => String(x || "").trim()).filter(Boolean);
+    } catch {}
+  }
+  return [];
+}
+
+const REASSIGN_KEY_TO_FORM_NAME = {
+  doc_pan_card: "pan_card",
+  doc_voter_id: "voter_id",
+  doc_aadhaar_card: "aadhaar_card",
+  doc_electricity_bill: "electricity_bill",
+  doc_rent_agreement: "rent_agreement",
+  doc_10th_certificate: "cert_10th",
+  doc_12th_certificate: "cert_12th",
+  doc_degree_diploma: "diploma_cert",
+  doc_technical_cert: "tech_cert",
+  doc_police_verification: "police_verification",
+};
 
 function parseEducationRows(raw) {
   if (raw == null || raw === "") return [];
@@ -170,6 +218,7 @@ export default function MyProfileForm() {
   const [educationRows, setEducationRows] = useState([]);
   const [statusModal, setStatusModal] = useState("");
   const [isClient, setIsClient] = useState(false);
+  const formRef = useRef(null);
 
   const { register, handleSubmit, reset, watch, setValue } = useForm();
 
@@ -367,23 +416,63 @@ export default function MyProfileForm() {
   const approvalStatus = getProfileApprovalStatus(saved);
   const approvalStatusLower = String(approvalStatus || "").toLowerCase();
   const isLocked = isProfileLockedFromServer(saved);
+  const showWaitingOnly = isInReviewStatus(approvalStatusLower);
+  const isReassignFlow = approvalStatusLower === "reassign" || approvalStatusLower === "revision_requested";
+  const reassignKeys = useMemo(() => parseReassignedFieldKeys(saved?.reassigned_fields), [saved?.reassigned_fields]);
+  const allowedNamesInReassign = useMemo(() => {
+    const out = new Set();
+    for (const k of reassignKeys) {
+      const mapped = REASSIGN_KEY_TO_FORM_NAME[k] || k;
+      out.add(mapped);
+    }
+    // Always keep submit button context fields
+    out.add("username");
+    out.add("empId");
+    out.add("employee_code");
+    return out;
+  }, [reassignKeys]);
+
+  useEffect(() => {
+    const root = formRef.current;
+    if (!root) return;
+
+    // Restore all hidden controls when not in reassign mode.
+    if (!isReassignFlow) {
+      root.querySelectorAll("[data-reassign-hidden='1']").forEach((el) => {
+        el.style.display = "";
+        el.removeAttribute("data-reassign-hidden");
+      });
+      return;
+    }
+
+    const controls = root.querySelectorAll("input[name], select[name], textarea[name]");
+    controls.forEach((el) => {
+      const name = el.getAttribute("name") || "";
+      const keep = allowedNamesInReassign.has(name);
+      // Hide closest form field block; fallback to element itself.
+      const block = el.closest("div") || el;
+      if (!keep) {
+        block.style.display = "none";
+        block.setAttribute("data-reassign-hidden", "1");
+      } else {
+        block.style.display = "";
+        block.removeAttribute("data-reassign-hidden");
+      }
+    });
+  }, [isReassignFlow, allowedNamesInReassign]);
+
+  const closeStatusModal = () => {
+    setStatusModal("");
+  };
 
   useEffect(() => {
     if (!saved) return;
-    if (!["approved", "rejected"].includes(approvalStatusLower)) return;
-    const userKey = saved.username || "self";
-    const seenKey = `employee_profile_submission_seen_${userKey}`;
-    let lastSeen = "";
-    try {
-      lastSeen = localStorage.getItem(seenKey) || "";
-    } catch {
-      lastSeen = "";
+    if (isInReviewStatus(approvalStatusLower)) {
+      setStatusModal(getInReviewStatusModal(approvalStatusLower));
+      return;
     }
-    if (lastSeen !== approvalStatusLower) {
+    if (approvalStatusLower === "approved" || approvalStatusLower === "rejected") {
       setStatusModal(approvalStatusLower);
-      try {
-        localStorage.setItem(seenKey, approvalStatusLower);
-      } catch {}
     }
   }, [approvalStatusLower, saved]);
 
@@ -397,6 +486,7 @@ export default function MyProfileForm() {
 
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit(onSubmit)}
       className="max-w-5xl mx-auto space-y-6 pb-16"
     >
@@ -411,20 +501,26 @@ export default function MyProfileForm() {
               <h3 className="text-3xl font-semibold text-gray-900">
                 {statusModal === "approved"
                   ? "Profile Approved"
-                  : statusModal === "pending"
-                    ? "Awaiting HR approval"
-                    : "Profile Rejected"}
+                  : statusModal === "rejected"
+                    ? "Profile Rejected"
+                    : statusModal === "pending_admin"
+                      ? "Admin approval pending"
+                      : "HR approval pending"}
               </h3>
               <p className="mt-4 text-base text-gray-600">
                 {statusModal === "approved"
-                  ? "HR ne aapka profile approve kar diya hai."
-                  : statusModal === "pending"
-                    ? "Your profile has been submitted and is waiting for review."
-                    : "Aapka profile reject hua hai. Required changes karke dubara submit karein."}
+                  ? "Aapka profile final approve ho gaya hai."
+                  : statusModal === "rejected"
+                    ? "Aapka profile reject hua hai. Required changes karke dubara submit karein."
+                    : statusModal === "pending_admin"
+                      ? "HR review complete hai. Ab final Super Admin approval pending hai."
+                      : statusModal === "pending_hr_docs"
+                        ? "Employee details approve ho chuki hain. HR details complete ho rahi hain."
+                        : "Aapka profile HR review mein hai. Final admin approval tak wait karein."}
               </p>
               <button
                 type="button"
-                onClick={() => setStatusModal("")}
+                onClick={closeStatusModal}
                 className="mt-6 rounded-lg bg-blue-700 px-5 py-2 text-sm font-medium text-white hover:bg-blue-800"
               >
                 OK
@@ -449,17 +545,48 @@ export default function MyProfileForm() {
             <span className="font-medium">HR status: </span>
             {approvalStatusLower === "approved" && "Approved"}
             {approvalStatusLower === "rejected" && "Rejected"}
-            {!["approved", "rejected"].includes(approvalStatusLower) && approvalStatus}
+            {isReassignFlow && "Corrections requested by HR"}
+            {isInReviewStatus(approvalStatusLower) && getInReviewStatusLabel(approvalStatusLower)}
+            {!["approved", "rejected"].includes(approvalStatusLower) &&
+              !isReassignFlow &&
+              !isInReviewStatus(approvalStatusLower) &&
+              approvalStatus}
           </div>
         )}
-        {isLocked && (
+        {isReassignFlow && (
+          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            HR ne correction bheja hai. Required updates karke dubara submit karein.
+            {saved?.reassignment_note && (
+              <p className="mt-1 text-xs text-amber-800">
+                <span className="font-medium">HR note:</span> {String(saved.reassignment_note)}
+              </p>
+            )}
+          </div>
+        )}
+        {isLocked && !isReassignFlow && (
           <p className="mt-2 text-sm text-gray-600">
-            {/* Profile database mein save ho chuka hai — HR rejection ke alawa fields edit nahi ho sakti. */}
+            Profile save ho chuka hai. Sirf HR rejection ke baad fields edit ho sakti hain.
           </p>
         )}
       </div>
 
-      <fieldset disabled={isLocked} className="min-w-0 border-0 p-0 m-0 space-y-6">
+      {showWaitingOnly ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 md:p-12 text-center shadow-sm">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+            🕒
+          </div>
+          <h2 className="text-2xl font-semibold text-gray-900">{getInReviewStatusLabel(approvalStatusLower)}</h2>
+          <p className="mt-3 text-sm text-gray-600 max-w-2xl mx-auto">
+            {approvalStatusLower === "pending_admin"
+              ? "HR ne submission final review ke liye bhej diya hai. Profile details final admin approval ke baad visible hongi."
+              : "Aapka profile review me hai. Final admin approval hone tak profile details hide rahengi."}
+          </p>
+        </section>
+      ) : (
+      <fieldset
+        disabled={false}
+        className={`min-w-0 border-0 p-0 m-0 space-y-6 ${isLocked ? "pointer-events-none" : ""}`}
+      >
       {/* Employment */}
       <section className="rounded-xl border border-sky-200 bg-sky-50/80 p-4 md:p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Employment details</h2>
@@ -1150,6 +1277,7 @@ export default function MyProfileForm() {
         </button>
       </div>
       </fieldset>
+      )}
     </form>
   );
 }

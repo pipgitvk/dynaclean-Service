@@ -1,3 +1,8 @@
+/**
+ * Legacy: single-step approve/reject on employee_profiles only.
+ * Multi-stage flow (pending → pending_hr_docs → pending_admin → approved) uses
+ * PATCH /api/empcrm/profile/submissions — same as dhynaclean_crm.
+ */
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { getDbConnection } from "@/lib/db";

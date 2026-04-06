@@ -10,6 +10,9 @@ export async function getRepListUserRole(username) {
   return rows[0]?.userRole || "";
 }
 
+/** Aligned with dhynaclean_crm empcrm profile submissions + rep_list.userRole */
 export function isHrApproverRole(role) {
-  return ["HR", "HR_MANAGER", "ADMIN", "SUPERADMIN"].includes(role);
+  if (!role) return false;
+  const r = String(role).trim().toLowerCase();
+  return ["hr", "hr_manager", "admin", "superadmin", "hr head", "hr executive"].includes(r);
 }
