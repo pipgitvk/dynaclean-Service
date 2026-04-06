@@ -92,6 +92,8 @@ import {
   ListOrdered,
   FilePlus2,
   PlayCircle,
+  UserCircle,
+  UserCheck,
 } from "lucide-react";
 
 // Icon map
@@ -108,6 +110,8 @@ const iconMap = {
   ShieldCheck,
   ListOrdered,
   FilePlus2,
+  UserCircle,
+  UserCheck,
 };
 
 export default function Sidebar({ isOpen, menuItems, onCloseSidebar }) {

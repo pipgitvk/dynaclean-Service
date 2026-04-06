@@ -46,3 +46,34 @@ export async function uploadExpenseBufferToCloudinary(buffer, originalName = "")
       .end(buffer);
   });
 }
+
+/**
+ * Employee profile documents (folder: employee_profiles).
+ */
+export async function uploadEmployeeProfileBufferToCloudinary(
+  buffer,
+  originalName = "",
+  username = "",
+) {
+  ensureCloudinaryConfig();
+  const safeUser = String(username || "user").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safe = sanitizeAttachmentFilename(originalName).replace(/\.[^.]+$/, "");
+  const publicIdSuffix = `${safeUser}_${Date.now()}_${safe || "doc"}`;
+
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: "employee_profiles",
+          public_id: publicIdSuffix,
+          resource_type: "auto",
+          overwrite: false,
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result.secure_url);
+        },
+      )
+      .end(buffer);
+  });
+}

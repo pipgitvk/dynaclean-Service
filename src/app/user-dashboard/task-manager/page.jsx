@@ -1,27 +1,8 @@
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 import { getDbConnection } from "@/lib/db";
 import ClientTaskTable from "@/components/task/ClientTaskTable";
 import { getSessionPayload } from "@/lib/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET;
 export const dynamic = "force-dynamic";
-
-async function getUsernameFromToken() {
-  const token = cookies().get("token")?.value;
-  if (!token) return null;
-
-  try {
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(JWT_SECRET),
-    );
-    return payload.username;
-  } catch (e) {
-    console.error("JWT Error:", e);
-    return null;
-  }
-}
 
 async function getTasks(username) {
   const conn = await getDbConnection();
@@ -65,8 +46,32 @@ export default async function TaskPage() {
     return <p className="text-red-600 p-4">❌ Unauthorized</p>;
   }
 
-  const tasks = await getTasks(username);
-  // console.log("Fetched Tasks:", tasks);
+  let tasks;
+  try {
+    tasks = await getTasks(username);
+  } catch (error) {
+    const msg = error?.sqlMessage ?? error?.message ?? "Unknown error";
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[task-manager]", msg);
+    }
+    const isDbAuth =
+      error?.code === "ER_ACCESS_DENIED_ERROR" || error?.errno === 1045;
+    return (
+      <div className="p-6 mx-auto">
+        <p className="text-red-600">Failed to load tasks.</p>
+        {isDbAuth && process.env.NODE_ENV === "development" && (
+          <p className="mt-2 text-sm text-gray-700">
+            Database login failed. If you use a remote host (e.g. Hostinger), set{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_HOST</code> to that
+            hostname, not localhost, and ensure{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_USER</code> /{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_PASSWORD</code> match
+            that server.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 mx-auto">

@@ -1,12 +1,16 @@
 // lib/getSidebarMenuItems.js
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 import { getSessionPayload } from "./auth";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret";
+import { getDbConnection } from "./db";
 
 const allMenuItems = [
   { path: "/user-dashboard", name: "Dashboard", roles: ["ALL"], icon: "Home" },
+  { path: "/user-dashboard/my-profile", name: "My Profile", roles: ["ALL"], icon: "UserCircle" },
+  {
+    path: "/user-dashboard/profile-approvals",
+    name: "Profile approvals",
+    roles: ["HR", "HR_MANAGER", "ADMIN", "SUPERADMIN"],
+    icon: "UserCheck",
+  },
   { path: "/user-dashboard/task-manager", name: "Task Manager", roles: ["ALL"], icon: "ClipboardList" },
   { path: "/user-dashboard/expenses", name: "Expense", roles: ["ALL"], icon: "DollarSign" },
   { path: "/user-dashboard/view_service_reports", name: "Service History", roles: ["ALL"], icon: "BookOpen" },
@@ -18,10 +22,26 @@ const allMenuItems = [
 ];
 
 export default async function getSidebarMenuItems() {
-  const payload = await getSessionPayload(); // ✅ Get the full session payload
+  const payload = await getSessionPayload();
   let role = payload?.role || "GUEST";
 
+  if (payload?.username) {
+    try {
+      const conn = await getDbConnection();
+      const [rows] = await conn.execute(
+        `SELECT userRole FROM rep_list WHERE username = ? LIMIT 1`,
+        [payload.username],
+      );
+      const ur = rows[0]?.userRole;
+      if (ur) role = ur;
+    } catch (e) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[getSidebarMenuItems] rep_list userRole:", e?.message);
+      }
+    }
+  }
+
   return allMenuItems.filter(
-    (item) => item.roles.includes("ALL") || item.roles.includes(role)
+    (item) => item.roles.includes("ALL") || item.roles.includes(role),
   );
 }

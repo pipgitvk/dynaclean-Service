@@ -52,11 +52,9 @@ export default async function UserDashboardPage() {
       [username]
     );
 
-    const completedCount = nrows[0].completed_count;
-    const pendingSparesCount = nrows[0].pending_spares_count;
-    const pendingCount = nrows[0].pending_count;
-
-    console.log(completedCount, pendingSparesCount, pendingCount);
+    const completedCount = Number(nrows[0]?.completed_count ?? 0);
+    const pendingSparesCount = Number(nrows[0]?.pending_spares_count ?? 0);
+    const pendingCount = Number(nrows[0]?.pending_count ?? 0);
 
     const user = rows[0];
 
@@ -114,7 +112,28 @@ export default async function UserDashboardPage() {
       </div>
     );
   } catch (error) {
-    console.error("Dashboard error:", error.message);
-    return <p className="text-red-600">Failed to load dashboard</p>;
+    const msg =
+      error?.sqlMessage ?? error?.message ?? "Unknown error";
+    // Avoid console.error here — it triggers the Next.js dev overlay for handled failures.
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[user-dashboard]", msg);
+    }
+    const isDbAuth =
+      error?.code === "ER_ACCESS_DENIED_ERROR" || error?.errno === 1045;
+    return (
+      <p className="text-red-600">
+        Failed to load dashboard.
+        {isDbAuth && process.env.NODE_ENV === "development" && (
+          <span className="block mt-2 text-sm text-gray-700">
+            Database login failed. If you use a remote host (e.g. Hostinger), set{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_HOST</code> to that
+            hostname, not localhost, and ensure{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_USER</code> /{" "}
+            <code className="bg-gray-100 px-1 rounded">DB_PASSWORD</code> match
+            that server.
+          </span>
+        )}
+      </p>
+    );
   }
 }
