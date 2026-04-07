@@ -106,6 +106,27 @@ export const PROFILE_FILE_FIELD_ALIASES = {
     "technical_certification_path",
     "tech_cert",
   ],
+  appt_letter_prev: ["appt_letter_prev_url", "appt_letter_prev_path", "doc_appt_letter_prev", "appt_letter_prev"],
+  exp_letter: ["exp_letter_url", "exp_letter_path", "doc_exp_letter", "exp_letter"],
+  relieving_letter: [
+    "relieving_letter_url",
+    "relieving_letter_path",
+    "doc_relieving_letter",
+    "relieving_letter",
+  ],
+  salary_slips: ["salary_slips_url", "salary_slips_path", "doc_salary_slips", "salary_slips"],
+  cancelled_cheque: [
+    "cancelled_cheque_url",
+    "cancelled_cheque_path",
+    "doc_cancelled_cheque",
+    "cancelled_cheque",
+  ],
+  loi_appointment: ["loi_appointment_url", "loi_appointment_path", "doc_loi_appointment", "loi_appointment"],
+  joining_form: ["joining_form_url", "joining_form_path", "doc_joining_form", "joining_form"],
+  emp_verification: ["emp_verification_url", "emp_verification_path", "doc_emp_verification", "emp_verification"],
+  code_conduct: ["code_conduct_url", "code_conduct_path", "doc_code_conduct", "code_conduct"],
+  nda: ["nda_url", "nda_path", "doc_nda", "nda"],
+  company_policy: ["company_policy_url", "company_policy_path", "doc_company_policy", "company_policy"],
 };
 
 /** Not editable via this form (server/system fields) */

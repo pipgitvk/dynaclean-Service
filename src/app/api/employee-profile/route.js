@@ -375,11 +375,10 @@ async function mergeEducationFromChildTable(conn, profile, columnSet) {
 
   const mapped = eduRows.map((r, i) => ({
     id: `edu_child_${i}`,
-    institution: String(r.board_university ?? ""),
-    degree: String(r.exam_name ?? ""),
-    year: String(r.year_of_passing ?? ""),
-    board: "",
-    percentage: String(r.grade_percentage ?? ""),
+    exam_name: String(r.exam_name ?? ""),
+    board_university: String(r.board_university ?? ""),
+    year_of_passing: String(r.year_of_passing ?? ""),
+    grade_percentage: String(r.grade_percentage ?? ""),
   }));
   profile[ejCol] = JSON.stringify(mapped);
 }

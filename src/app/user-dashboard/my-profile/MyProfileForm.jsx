@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
-import { Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 import { PROFILE_FILE_FIELD_ALIASES } from "@/lib/employeeProfileColumns";
 
 /** True once employee_profiles row exists (GET returns id). */
@@ -15,9 +15,19 @@ function hasPersistedProfileRow(saved) {
   return true;
 }
 
+/** API / UI → boolean: user is experienced (not fresher). */
+function normalizeIsExperiencedBool(v) {
+  return v === true || v === 1 || v === "1";
+}
+
+/** Radio group value for react-hook-form (`"1"` experienced, `"0"` fresher). */
+function toFormIsExperiencedRadio(v) {
+  return normalizeIsExperiencedBool(v) ? "1" : "0";
+}
+
 /**
- * Editable only when no DB row yet, or HR ne reject kiya ho (dubara submit).
- * DB me data hai aur rejected nahi → read-only.
+ * Editable only when there is no DB row yet, or HR has rejected (resubmit).
+ * If data exists in the DB and status is not rejected → read-only.
  */
 function isProfileLockedFromServer(saved) {
   const st = String(getProfileApprovalStatus(saved) || "").toLowerCase();
@@ -36,6 +46,17 @@ const LEGACY_FILE_TO_EMPCRM_DOC = {
   cert_12th: "doc_12th_certificate",
   diploma_cert: "doc_degree_diploma",
   tech_cert: "doc_technical_cert",
+  appt_letter_prev: "doc_appt_letter_prev",
+  exp_letter: "doc_exp_letter",
+  relieving_letter: "doc_relieving_letter",
+  salary_slips: "doc_salary_slips",
+  cancelled_cheque: "doc_cancelled_cheque",
+  loi_appointment: "doc_loi_appointment",
+  joining_form: "doc_joining_form",
+  emp_verification: "doc_emp_verification",
+  code_conduct: "doc_code_conduct",
+  nda: "doc_nda",
+  company_policy: "doc_company_policy",
   police_verification: "doc_police_verification",
 };
 
@@ -118,6 +139,17 @@ const REASSIGN_KEY_TO_FORM_NAME = {
   doc_12th_certificate: "cert_12th",
   doc_degree_diploma: "diploma_cert",
   doc_technical_cert: "tech_cert",
+  doc_appt_letter_prev: "appt_letter_prev",
+  doc_exp_letter: "exp_letter",
+  doc_relieving_letter: "relieving_letter",
+  doc_salary_slips: "salary_slips",
+  doc_cancelled_cheque: "cancelled_cheque",
+  doc_loi_appointment: "loi_appointment",
+  doc_joining_form: "joining_form",
+  doc_emp_verification: "emp_verification",
+  doc_code_conduct: "code_conduct",
+  doc_nda: "nda",
+  doc_company_policy: "company_policy",
   doc_police_verification: "police_verification",
 };
 
@@ -141,28 +173,38 @@ function newEducationRow() {
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `edu_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-    institution: "",
-    degree: "",
-    year: "",
-    board: "",
-    percentage: "",
+    exam_name: "",
+    board_university: "",
+    year_of_passing: "",
+    grade_percentage: "",
   };
 }
 
+/** Align with CRM `employee_education` / submission `education[]` keys; migrate legacy form keys. */
 function normalizeEducationRows(arr) {
-  return (Array.isArray(arr) ? arr : []).map((r, i) => ({
-    id:
+  return (Array.isArray(arr) ? arr : []).map((r, i) => {
+    const id =
       r?.id != null && String(r.id).trim() !== ""
         ? String(r.id)
         : typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
-          : `edu_${i}_${Date.now()}`,
-    institution: String(r?.institution ?? ""),
-    degree: String(r?.degree ?? ""),
-    year: String(r?.year ?? ""),
-    board: String(r?.board ?? ""),
-    percentage: String(r?.percentage ?? ""),
-  }));
+          : `edu_${i}_${Date.now()}`;
+    const exam =
+      String(r?.exam_name ?? "").trim() ||
+      String(r?.degree ?? "").trim() ||
+      String(r?.institution ?? "").trim();
+    const board =
+      String(r?.board_university ?? "").trim() ||
+      String(r?.board ?? "").trim() ||
+      String(r?.institution ?? "").trim();
+    return {
+      id,
+      exam_name: exam,
+      board_university: board,
+      year_of_passing: String(r?.year_of_passing ?? r?.year ?? ""),
+      grade_percentage: String(r?.grade_percentage ?? r?.percentage ?? ""),
+    };
+  });
 }
 
 function FieldLabel({ children, required }) {
@@ -218,6 +260,7 @@ export default function MyProfileForm() {
   const [educationRows, setEducationRows] = useState([]);
   const [statusModal, setStatusModal] = useState("");
   const [isClient, setIsClient] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const formRef = useRef(null);
 
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -241,15 +284,14 @@ export default function MyProfileForm() {
         };
         const em = data.empId ?? initial.empId ?? "";
         if (em !== "") initial.employee_code = String(em);
-        if (initial.is_experienced !== undefined && initial.is_experienced !== null) {
-          initial.is_experienced =
-            initial.is_experienced === true ||
-            initial.is_experienced === 1 ||
-            initial.is_experienced === "1";
-        }
-        setSaved(initial);
-        reset(initial);
-        setEducationRows(normalizeEducationRows(parseEducationRows(initial.education_json)));
+        const expBool = normalizeIsExperiencedBool(initial.is_experienced);
+        const savedProfile = { ...initial, is_experienced: expBool };
+        setSaved(savedProfile);
+        reset({
+          ...savedProfile,
+          is_experienced: toFormIsExperiencedRadio(expBool),
+        });
+        setEducationRows(normalizeEducationRows(parseEducationRows(savedProfile.education_json)));
       } catch (e) {
         toast.error(e?.message || "Could not load profile");
       } finally {
@@ -274,6 +316,16 @@ export default function MyProfileForm() {
     [columns],
   );
 
+  const watchedEmploymentType = watch("is_experienced");
+  const hasIsExperiencedColumn = col("is_experienced");
+  useEffect(() => {
+    if (!hasIsExperiencedColumn) return;
+    if (normalizeIsExperiencedBool(watchedEmploymentType)) return;
+    for (const name of ["appt_letter_prev", "exp_letter", "relieving_letter", "salary_slips"]) {
+      setValue(name, undefined);
+    }
+  }, [watchedEmploymentType, hasIsExperiencedColumn, setValue]);
+
   const updateEducationRow = (index, patch) => {
     setEducationRows((prev) => {
       const next = [...prev];
@@ -297,7 +349,7 @@ export default function MyProfileForm() {
 
   const onSubmit = async (data) => {
     if (isProfileLockedFromServer(saved)) {
-      toast.error("Profile save ho chuka hai. Sirf HR rejection ke baad edit kar sakte hain.");
+      toast.error("Your profile is already saved. You can edit only after HR rejects it.");
       return;
     }
 
@@ -333,26 +385,63 @@ export default function MyProfileForm() {
       toast.error("12th qualification certificate is required");
       return;
     }
+    if (doc("cancelled_cheque") && !getSavedDocUrl(saved, "cancelled_cheque") && !filePicked(data.cancelled_cheque)) {
+      toast.error("Cancelled cheque / bank passbook upload is required");
+      return;
+    }
 
-    if (col("education_json")) {
-      const filled = educationRows.filter(
-        (r) => String(r.institution || "").trim() && String(r.degree || "").trim(),
-      );
-      if (filled.length === 0) {
-        toast.error('At least one education entry is required. Click "Add Education".');
+    const isExperienced = normalizeIsExperiencedBool(data.is_experienced);
+    if (isExperienced) {
+      if (doc("appt_letter_prev") && !getSavedDocUrl(saved, "appt_letter_prev") && !filePicked(data.appt_letter_prev)) {
+        toast.error("Previous company appointment letter is required");
+        return;
+      }
+      if (doc("exp_letter") && !getSavedDocUrl(saved, "exp_letter") && !filePicked(data.exp_letter)) {
+        toast.error("Experience letter is required");
+        return;
+      }
+      if (doc("relieving_letter") && !getSavedDocUrl(saved, "relieving_letter") && !filePicked(data.relieving_letter)) {
+        toast.error("Relieving letter is required");
+        return;
+      }
+      if (doc("salary_slips") && !getSavedDocUrl(saved, "salary_slips") && !filePicked(data.salary_slips)) {
+        toast.error("Last 3 months salary slips are required");
         return;
       }
     }
 
+    if (col("education_json")) {
+      const filled = educationRows.filter(
+        (r) => String(r.exam_name || "").trim() && String(r.board_university || "").trim(),
+      );
+      if (filled.length === 0) {
+        toast.error("Add at least one qualification — fill in Exam/Degree and Board/University.");
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    try {
     const fd = new FormData();
     if (col("education_json")) {
-      fd.append("education_json", JSON.stringify(educationRows));
+      fd.append(
+        "education_json",
+        JSON.stringify(
+          educationRows.map((r) => ({
+            id: r.id,
+            exam_name: String(r.exam_name || "").trim(),
+            board_university: String(r.board_university || "").trim(),
+            year_of_passing: String(r.year_of_passing || "").trim(),
+            grade_percentage: String(r.grade_percentage || "").trim(),
+          })),
+        ),
+      );
     }
     const empcrmEducation = educationRows.map((r) => ({
-      exam_name: String(r.degree || "").trim() || String(r.institution || "").trim(),
-      board_university: String(r.board || r.institution || "").trim(),
-      year_of_passing: String(r.year || "").trim(),
-      grade_percentage: String(r.percentage || "").trim(),
+      exam_name: String(r.exam_name || "").trim(),
+      board_university: String(r.board_university || "").trim(),
+      year_of_passing: String(r.year_of_passing || "").trim(),
+      grade_percentage: String(r.grade_percentage || "").trim(),
     }));
     if (empcrmEducation.some((r) => r.exam_name || r.board_university)) {
       fd.append("education", JSON.stringify(empcrmEducation));
@@ -361,7 +450,7 @@ export default function MyProfileForm() {
       const val = data[key];
 
       if (key === "is_experienced") {
-        fd.append("is_experienced", data.is_experienced ? "1" : "0");
+        fd.append("is_experienced", normalizeIsExperiencedBool(val) ? "1" : "0");
         continue;
       }
 
@@ -382,7 +471,6 @@ export default function MyProfileForm() {
       }
     }
 
-    try {
       const res = await fetch("/api/employee-profile", {
         method: "PUT",
         credentials: "include",
@@ -392,7 +480,7 @@ export default function MyProfileForm() {
       if (!res.ok) throw new Error(out.error || "Save failed");
       toast.success(
         hasApprovalColumn
-          ? "Profile saved — HR approval ke liye bheja gaya."
+          ? "Profile saved — submitted for HR approval."
           : "Profile saved",
       );
       setStatusModal("pending");
@@ -400,16 +488,19 @@ export default function MyProfileForm() {
       const again = await reload.json();
       if (again.profile) {
         const next = { ...again.profile };
-        if (next.is_experienced !== undefined && next.is_experienced !== null) {
-          next.is_experienced =
-            next.is_experienced === true || next.is_experienced === 1 || next.is_experienced === "1";
-        }
+        const expBool = normalizeIsExperiencedBool(next.is_experienced);
+        next.is_experienced = expBool;
         setSaved(next);
-        reset(next);
+        reset({
+          ...next,
+          is_experienced: toFormIsExperiencedRadio(expBool),
+        });
         setEducationRows(normalizeEducationRows(parseEducationRows(next.education_json)));
       }
     } catch (e) {
       toast.error(e?.message || "Save failed");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -429,6 +520,7 @@ export default function MyProfileForm() {
     out.add("username");
     out.add("empId");
     out.add("employee_code");
+    out.add("is_experienced");
     return out;
   }, [reassignKeys]);
 
@@ -488,7 +580,7 @@ export default function MyProfileForm() {
     <form
       ref={formRef}
       onSubmit={handleSubmit(onSubmit)}
-      className="max-w-5xl mx-auto space-y-6 pb-16"
+      className="relative max-w-5xl mx-auto space-y-6 pb-16"
     >
       {isClient &&
         statusModal &&
@@ -509,14 +601,14 @@ export default function MyProfileForm() {
               </h3>
               <p className="mt-4 text-base text-gray-600">
                 {statusModal === "approved"
-                  ? "Aapka profile final approve ho gaya hai."
+                  ? "Your profile has been fully approved."
                   : statusModal === "rejected"
-                    ? "Aapka profile reject hua hai. Required changes karke dubara submit karein."
+                    ? "Your profile was rejected. Make the required changes and submit again."
                     : statusModal === "pending_admin"
-                      ? "HR review complete hai. Ab final Super Admin approval pending hai."
+                      ? "HR review is complete. Final Super Admin approval is pending."
                       : statusModal === "pending_hr_docs"
-                        ? "Employee details approve ho chuki hain. HR details complete ho rahi hain."
-                        : "Aapka profile HR review mein hai. Final admin approval tak wait karein."}
+                        ? "Employee details are approved. HR details are being completed."
+                        : "Your profile is under HR review. Please wait for final admin approval."}
               </p>
               <button
                 type="button"
@@ -555,7 +647,7 @@ export default function MyProfileForm() {
         )}
         {isReassignFlow && (
           <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            HR ne correction bheja hai. Required updates karke dubara submit karein.
+            HR has requested corrections. Apply the required updates and submit again.
             {saved?.reassignment_note && (
               <p className="mt-1 text-xs text-amber-800">
                 <span className="font-medium">HR note:</span> {String(saved.reassignment_note)}
@@ -565,7 +657,7 @@ export default function MyProfileForm() {
         )}
         {isLocked && !isReassignFlow && (
           <p className="mt-2 text-sm text-gray-600">
-            Profile save ho chuka hai. Sirf HR rejection ke baad fields edit ho sakti hain.
+            Your profile is already saved. Fields can be edited only after HR rejects.
           </p>
         )}
       </div>
@@ -578,8 +670,8 @@ export default function MyProfileForm() {
           <h2 className="text-2xl font-semibold text-gray-900">{getInReviewStatusLabel(approvalStatusLower)}</h2>
           <p className="mt-3 text-sm text-gray-600 max-w-2xl mx-auto">
             {approvalStatusLower === "pending_admin"
-              ? "HR ne submission final review ke liye bhej diya hai. Profile details final admin approval ke baad visible hongi."
-              : "Aapka profile review me hai. Final admin approval hone tak profile details hide rahengi."}
+              ? "HR has sent your submission for final review. Profile details will be visible after final admin approval."
+              : "Your profile is under review. Profile details will stay hidden until final admin approval."}
           </p>
         </section>
       ) : (
@@ -587,6 +679,44 @@ export default function MyProfileForm() {
         disabled={false}
         className={`min-w-0 border-0 p-0 m-0 space-y-6 ${isLocked ? "pointer-events-none" : ""}`}
       >
+      {col("is_experienced") && (
+        <section className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 md:p-6 shadow-sm">
+          <FieldLabel required>Employment Type (Select before filling details)</FieldLabel>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <label
+              className={`flex min-w-[140px] flex-1 cursor-pointer items-center gap-2 rounded-lg border px-4 py-3 transition-colors ${
+                watchedEmploymentType === "0"
+                  ? "border-indigo-500 bg-white ring-1 ring-indigo-400"
+                  : "border-gray-200 bg-white/90 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                value="0"
+                className="border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                {...register("is_experienced")}
+              />
+              <span className="text-sm font-medium text-gray-800">Fresher</span>
+            </label>
+            <label
+              className={`flex min-w-[140px] flex-1 cursor-pointer items-center gap-2 rounded-lg border px-4 py-3 transition-colors ${
+                watchedEmploymentType === "1"
+                  ? "border-indigo-500 bg-white ring-1 ring-indigo-400"
+                  : "border-gray-200 bg-white/90 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                value="1"
+                className="border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                {...register("is_experienced")}
+              />
+              <span className="text-sm font-medium text-gray-800">Experienced</span>
+            </label>
+          </div>
+        </section>
+      )}
+
       {/* Employment */}
       <section className="rounded-xl border border-sky-200 bg-sky-50/80 p-4 md:p-6 space-y-4 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Employment details</h2>
@@ -707,19 +837,6 @@ export default function MyProfileForm() {
                 <option value="Notice Period">Notice Period</option>
                 <option value="Exited">Exited</option>
               </select>
-            </div>
-          )}
-          {col("is_experienced") && (
-            <div className="flex items-center gap-2 pt-6">
-              <input
-                type="checkbox"
-                id="is_experienced"
-                className="rounded border-gray-300"
-                {...register("is_experienced")}
-              />
-              <label htmlFor="is_experienced" className="text-sm font-medium text-gray-800">
-                Experienced (prior work experience)
-              </label>
             </div>
           )}
         </div>
@@ -901,8 +1018,8 @@ export default function MyProfileForm() {
       <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:p-6 space-y-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">KYC documents</h2>
         <p className="text-xs text-gray-600">
-          Files upload ho kar tabhi save honge jab <code className="rounded bg-white/80 px-1">employee_profiles</code> mein
-          matching column ho (jaise <code className="rounded bg-white/80 px-1">pan_card_path</code>,{" "}
+          Uploads are only persisted when <code className="rounded bg-white/80 px-1">employee_profiles</code> has a
+          matching column (for example <code className="rounded bg-white/80 px-1">pan_card_path</code>,{" "}
           <code className="rounded bg-white/80 px-1">cert_10th_url</code>).
         </p>
 
@@ -983,7 +1100,7 @@ export default function MyProfileForm() {
         </div>
       </section>
 
-      {/* Qualification details — always visible */}
+      {/* Qualification rows — CRM employee_education fields only */}
       <section className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 md:p-6 space-y-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="text-lg font-semibold text-gray-900">
@@ -995,17 +1112,20 @@ export default function MyProfileForm() {
             className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:text-blue-900"
           >
             <Plus className="h-4 w-4" aria-hidden />
-            Add Education
+            Add qualification
           </button>
         </div>
 
         <p className="text-xs text-gray-600">
-          Education list tabhi save hogi jab DB mein <code className="rounded bg-white/80 px-1">education_json</code> column ho.
-          Certificate files ke liye columns jaise <code className="rounded bg-white/80 px-1">cert_10th_url</code> add karein.
+          Per the CRM, only these four fields apply: <strong>exam name</strong>, <strong>board / university</strong>,{" "}
+          <strong>year</strong>, <strong>grade %</strong>.
+          {col("education_json")
+            ? ""
+            : " This list is saved only when the profile has an `education_json` column."}
         </p>
 
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          At least one education entry is required. Click &quot;Add Education&quot; to add a row.
+          At least one row: Exam/Degree and Board/University are required.
         </div>
         <div className="space-y-3">
           {educationRows.map((row, idx) => (
@@ -1014,7 +1134,7 @@ export default function MyProfileForm() {
               className="rounded-lg border border-gray-200 bg-white p-3 md:p-4 space-y-3"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-medium text-gray-800">Education {idx + 1}</span>
+                <span className="text-sm font-medium text-gray-800">Qualification {idx + 1}</span>
                 <button
                   type="button"
                   onClick={() => removeEducationRow(idx)}
@@ -1024,84 +1144,139 @@ export default function MyProfileForm() {
                   Remove
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div>
-                  <FieldLabel required>Institution / School</FieldLabel>
+                  <FieldLabel required>Exam / Degree</FieldLabel>
                   <input
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    value={row.institution}
-                    onChange={(e) => updateEducationRow(idx, { institution: e.target.value })}
+                    placeholder="e.g., B.Com"
+                    value={row.exam_name}
+                    onChange={(e) => updateEducationRow(idx, { exam_name: e.target.value })}
                   />
                 </div>
                 <div>
-                  <FieldLabel required>Degree / Course</FieldLabel>
+                  <FieldLabel required>Board / University</FieldLabel>
                   <input
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    value={row.degree}
-                    onChange={(e) => updateEducationRow(idx, { degree: e.target.value })}
+                    value={row.board_university}
+                    onChange={(e) => updateEducationRow(idx, { board_university: e.target.value })}
                   />
                 </div>
                 <div>
                   <FieldLabel>Year of passing</FieldLabel>
                   <input
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    value={row.year}
-                    onChange={(e) => updateEducationRow(idx, { year: e.target.value })}
+                    placeholder="2020"
+                    value={row.year_of_passing}
+                    onChange={(e) => updateEducationRow(idx, { year_of_passing: e.target.value })}
                   />
                 </div>
                 <div>
-                  <FieldLabel>Board / University</FieldLabel>
+                  <FieldLabel>Grade / Percentage</FieldLabel>
                   <input
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    value={row.board}
-                    onChange={(e) => updateEducationRow(idx, { board: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Percentage / CGPA</FieldLabel>
-                  <input
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                    value={row.percentage}
-                    onChange={(e) => updateEducationRow(idx, { percentage: e.target.value })}
+                    placeholder="75%"
+                    value={row.grade_percentage}
+                    onChange={(e) => updateEducationRow(idx, { grade_percentage: e.target.value })}
                   />
                 </div>
               </div>
             </div>
           ))}
         </div>
+      </section>
 
-        <div className="space-y-2 pt-2">
-          <p className="text-sm font-semibold text-gray-900">Certificates &amp; marksheets</p>
+      <section className="rounded-xl border border-emerald-100 bg-white p-4 md:p-6 space-y-4 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">Qualification certificates &amp; marksheets</h2>
+        <p className="text-xs text-gray-600">These uploads are linked via CRM document keys.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <DocRow
+            label="10th Qualification Certificate"
+            required
+            name="cert_10th"
+            register={register}
+            watch={watch}
+            existingUrl={getSavedDocUrl(saved, "cert_10th")}
+          />
+          <DocRow
+            label="12th Qualification Certificate"
+            required
+            name="cert_12th"
+            register={register}
+            watch={watch}
+            existingUrl={getSavedDocUrl(saved, "cert_12th")}
+          />
+          <DocRow
+            label="Diploma / Degree Certificate"
+            name="diploma_cert"
+            register={register}
+            watch={watch}
+            existingUrl={getSavedDocUrl(saved, "diploma_cert")}
+          />
+          <DocRow
+            label="Relevant Technical Certification"
+            name="tech_cert"
+            register={register}
+            watch={watch}
+            existingUrl={getSavedDocUrl(saved, "tech_cert")}
+          />
+        </div>
+      </section>
+
+      {/* Experience / payroll supporting documents */}
+      <section className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 md:p-6 space-y-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">Bank & payroll / experience documents</h2>
+
+        {(!col("is_experienced") || normalizeIsExperiencedBool(watchedEmploymentType)) && (
+          <div className="rounded-lg border border-amber-300 bg-white/90 p-4 space-y-3">
+            <h3 className="font-semibold text-gray-900">Experience documents</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <DocRow
+                label="Appointment Letter (Previous Company)"
+                required
+                name="appt_letter_prev"
+                register={register}
+                watch={watch}
+                existingUrl={getSavedDocUrl(saved, "appt_letter_prev")}
+              />
+              <DocRow
+                label="Experience Letter"
+                required
+                name="exp_letter"
+                register={register}
+                watch={watch}
+                existingUrl={getSavedDocUrl(saved, "exp_letter")}
+              />
+              <DocRow
+                label="Relieving Letter"
+                required
+                name="relieving_letter"
+                register={register}
+                watch={watch}
+                existingUrl={getSavedDocUrl(saved, "relieving_letter")}
+              />
+              <DocRow
+                label="Last 3 Months Salary Slips"
+                required
+                name="salary_slips"
+                register={register}
+                watch={watch}
+                existingUrl={getSavedDocUrl(saved, "salary_slips")}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg border border-amber-300 bg-white/90 p-4 space-y-3">
+          <h3 className="font-semibold text-gray-900">Bank & payroll details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <DocRow
-              label="10th Qualification Certificate"
+              label="Cancelled Cheque / Bank Passbook (Front)"
               required
-              name="cert_10th"
+              name="cancelled_cheque"
               register={register}
               watch={watch}
-              existingUrl={getSavedDocUrl(saved, "cert_10th")}
-            />
-            <DocRow
-              label="12th Qualification Certificate"
-              required
-              name="cert_12th"
-              register={register}
-              watch={watch}
-              existingUrl={getSavedDocUrl(saved, "cert_12th")}
-            />
-            <DocRow
-              label="Diploma / Degree Certificate"
-              name="diploma_cert"
-              register={register}
-              watch={watch}
-              existingUrl={getSavedDocUrl(saved, "diploma_cert")}
-            />
-            <DocRow
-              label="Relevant Technical Certification"
-              name="tech_cert"
-              register={register}
-              watch={watch}
-              existingUrl={getSavedDocUrl(saved, "tech_cert")}
+              existingUrl={getSavedDocUrl(saved, "cancelled_cheque")}
             />
           </div>
         </div>
@@ -1270,13 +1445,27 @@ export default function MyProfileForm() {
       <div className="flex justify-end gap-3">
         <button
           type="submit"
-          disabled={isLocked}
+          disabled={isLocked || submitting}
           className="rounded-lg bg-green-700 px-6 py-2.5 text-sm font-medium text-white shadow hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Save profile
+          {submitting ? "Saving…" : "Save profile"}
         </button>
       </div>
       </fieldset>
+      )}
+
+      {submitting && (
+        <div
+          className="absolute inset-0 z-[100] flex items-center justify-center rounded-xl bg-white/70 backdrop-blur-[2px]"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-sky-200 bg-white px-8 py-6 shadow-xl">
+            <Loader2 className="h-10 w-10 animate-spin text-sky-600" aria-hidden />
+            <p className="text-sm font-medium text-gray-800">Saving profile…</p>
+            <p className="text-xs text-gray-500 text-center max-w-xs">Please wait for confirmation.</p>
+          </div>
+        </div>
       )}
     </form>
   );
