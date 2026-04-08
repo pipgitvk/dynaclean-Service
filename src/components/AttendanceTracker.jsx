@@ -2,6 +2,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import FaceCaptureModal from "./FaceCaptureModal";
+import { getISTCalendarDate } from "@/lib/istDateTime";
 
 const AttendanceTracker = ({ username }) => {
   const [attendanceData, setAttendanceData] = useState(null);
@@ -180,7 +181,7 @@ const AttendanceTracker = ({ username }) => {
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      const today = now.toISOString().slice(0, 10);
+      const today = getISTCalendarDate(now);
 
       setPreBreakTime(null);
       setEndBreakNotification(null);

@@ -12,9 +12,11 @@ export async function register() {
         console.log("[Auto-Checkout] Running 6:30 PM auto-checkout...");
         try {
           const { getDbConnection } = await import("@/lib/db");
+          const { formatISTSqlDateTime, getISTCalendarDate } = await import("@/lib/istDateTime");
           const conn = await getDbConnection();
           const now = new Date();
-          const today = now.toISOString().slice(0, 10);
+          const today = getISTCalendarDate(now);
+          const nowIst = formatISTSqlDateTime(now);
 
           const [result] = await conn.execute(
             `UPDATE attendance_logs
@@ -23,7 +25,7 @@ export async function register() {
              WHERE date = ?
                AND checkin_time IS NOT NULL
                AND checkout_time IS NULL`,
-            [now, today]
+            [nowIst, today]
           );
 
           console.log(

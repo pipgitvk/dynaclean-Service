@@ -2,6 +2,7 @@
 
 import { getDbConnection } from "@/lib/db";
 import { ensureCheckinPhotoColumnStoresLongUrls } from "@/lib/ensureAttendanceSchema";
+import { formatISTSqlDateTime, getISTCalendarDate, normalizeAttendanceLogTimes } from "@/lib/istDateTime";
 import { NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -57,7 +58,7 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const username = searchParams.get("username");
   const conn = await getDbConnection();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getISTCalendarDate();
 
   try {
     const [rows] = await conn.execute(
@@ -65,7 +66,7 @@ export async function GET(req) {
       [username, today]
     );
 
-    const attendanceLog = rows.length > 0 ? rows[0] : null;
+    const attendanceLog = rows.length > 0 ? normalizeAttendanceLogTimes(rows[0]) : null;
 
     return NextResponse.json(attendanceLog);
   } catch (error) {
@@ -81,7 +82,8 @@ export async function POST(req) {
   const { username, action, latitude, longitude, checkin_photo } = body;
   const conn = await getDbConnection();
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = getISTCalendarDate(now);
+  const nowIst = formatISTSqlDateTime(now);
 
   let locationAddress = null;
   if (latitude && longitude) {
@@ -124,7 +126,7 @@ export async function POST(req) {
         await ensureCheckinPhotoColumnStoresLongUrls(conn);
         await conn.execute(
           "INSERT INTO attendance_logs (username, date, checkin_time, checkin_latitude, checkin_longitude, checkin_address, checkin_photo) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [username, today, now, latitude, longitude, locationAddress, photoUrl]
+          [username, today, nowIst, latitude, longitude, locationAddress, photoUrl]
         );
         break;
       }
@@ -132,42 +134,42 @@ export async function POST(req) {
       case "break_morning":
         await conn.execute(
           "UPDATE attendance_logs SET break_morning_start = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
       case "end_morning":
         await conn.execute(
           "UPDATE attendance_logs SET break_morning_end = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
       case "break_lunch":
         await conn.execute(
           "UPDATE attendance_logs SET break_lunch_start = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
       case "end_lunch":
         await conn.execute(
           "UPDATE attendance_logs SET break_lunch_end = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
       case "break_evening":
         await conn.execute(
           "UPDATE attendance_logs SET break_evening_start = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
       case "end_evening":
         await conn.execute(
           "UPDATE attendance_logs SET break_evening_end = ? WHERE username = ? AND date = ?",
-          [now, username, today]
+          [nowIst, username, today]
         );
         break;
 
@@ -175,7 +177,7 @@ export async function POST(req) {
         const checkoutAddress = locationAddress || "Auto checkout at 6:30 PM";
         await conn.execute(
           "UPDATE attendance_logs SET checkout_time = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_address = ? WHERE username = ? AND date = ?",
-          [now, latitude ?? null, longitude ?? null, checkoutAddress, username, today]
+          [nowIst, latitude ?? null, longitude ?? null, checkoutAddress, username, today]
         );
         break;
       }

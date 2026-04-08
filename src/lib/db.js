@@ -39,6 +39,8 @@ export async function getDbConnection() {
       connectionLimit: 100,  // max simultaneous
       queueLimit: 0,
       connectTimeout: 10000,
+      // Align TIMESTAMP/session handling with IST for attendance and other local times
+      timezone: "+05:30",
     });
 
     console.log("✅ [DB] Connection pool created");
