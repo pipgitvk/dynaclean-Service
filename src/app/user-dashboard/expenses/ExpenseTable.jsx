@@ -13,8 +13,11 @@ export default function ExpenseTable({ rows, role }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
 
+  const safeRows = Array.isArray(rows) ? rows : [];
+
   // Filter rows based on the search query, from date, and to date
-  const filteredRows = rows.filter((row) => {
+  const filteredRows = safeRows.filter((row) => {
+    if (!row || typeof row !== "object") return false;
     const totalCost =
       Number(row.TicketCost || 0) +
       Number(row.HotelCost || 0) +

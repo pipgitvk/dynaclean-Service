@@ -1,32 +1,23 @@
 import { getDbConnection } from "@/lib/db";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 import ExpenseTable from "./ExpenseTable";
 import { getSessionPayload } from "@/lib/auth";
-
-const JWT_SECRET = process.env.JWT_SECRET;
 
 export const dynamic = "force-dynamic";
 
 // Server Component
 export default async function ExpensesPage() {
-  let username = "";
+  let rows = [];
   let role = "";
-
 
   const payload = await getSessionPayload();
   if (!payload) {
-    // You can handle unauthorized access here, e.g., redirect or return an error
     return null;
   }
 
-  console.log(payload);
-  username = payload.username;
-  role = payload.role;
+  const username =
+    payload.username != null ? String(payload.username).trim() : "";
+  role = payload.role != null ? String(payload.role) : "";
 
-  const conn = await getDbConnection();
-
-  // Direct query for all expenses (passing `username` as a parameter)
   const query = `SELECT ID, TravelDate, FromLocation, Tolocation,
             TicketCost, HotelCost, MealsCost, OtherExpenses,
             approved_amount, payment_date, approval_status
@@ -34,9 +25,17 @@ export default async function ExpensesPage() {
         WHERE username = ?
         ORDER BY TravelDate DESC;`;
 
-  // Pass `username` as the second argument to `execute`
-  const [rows] = await conn.execute(query, [username]);
-  // await conn.end();
+  try {
+    const conn = await getDbConnection();
+    if (!conn || typeof conn.execute !== "function") {
+      throw new Error("Database connection is not available.");
+    }
+    const [result] = await conn.execute(query, [username]);
+    rows = Array.isArray(result) ? result : [];
+  } catch (err) {
+    console.error("ExpensesPage: failed to load expenses:", err);
+    rows = [];
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">

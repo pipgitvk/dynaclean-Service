@@ -5,6 +5,7 @@ import ServiceTable from "@/components/services/ServiceTable"; // Import the new
 import { cookies } from "next/headers";
 
 import { getSessionPayload } from "@/lib/auth";
+import { getISTCalendarDate } from "@/lib/istDateTime";
 
 export default async function ViewServiceReportsPage() {
   let serviceRecords = [];
@@ -64,6 +65,13 @@ export default async function ViewServiceReportsPage() {
       completed_date: row.completed_date
         ? new Date(row.completed_date).toLocaleDateString()
         : "N/A",
+      // IST calendar YYYY-MM-DD for client-side date range filter
+      _filterComplaintYmd: row.complaint_date
+        ? getISTCalendarDate(new Date(row.complaint_date))
+        : null,
+      _filterCompletedYmd: row.completed_date
+        ? getISTCalendarDate(new Date(row.completed_date))
+        : null,
     }));
 
     // conn.end();

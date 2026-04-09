@@ -14,6 +14,9 @@ export default function ServiceTable({ serviceRecords, role }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
   const [statusFilter, setStatusFilter] = useState(initialStatus.toUpperCase());
+  const [dateField, setDateField] = useState("complaint"); // "complaint" | "completed"
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
 
@@ -55,6 +58,18 @@ export default function ServiceTable({ serviceRecords, role }) {
     statusFilter ? record.status?.toUpperCase() === statusFilter : true
   );
 
+  const filteredByDate = filteredByStatus.filter((record) => {
+    if (!dateFrom && !dateTo) return true;
+    const ymd =
+      dateField === "complaint"
+        ? record._filterComplaintYmd
+        : record._filterCompletedYmd;
+    if (!ymd) return false;
+    if (dateFrom && ymd < dateFrom) return false;
+    if (dateTo && ymd > dateTo) return false;
+    return true;
+  });
+
   // Handlers
   const handleSort = (key) => {
     let direction = "asc";
@@ -85,7 +100,11 @@ export default function ServiceTable({ serviceRecords, role }) {
 
   const handleResetSearch = () => {
     setSearchTerm("");
+    setDateFrom("");
+    setDateTo("");
   };
+
+  const hasDateFilter = Boolean(dateFrom || dateTo);
 
   return (
     <div className="flex justify-center items-center bg-gray-50 py-6 px-4">
@@ -105,6 +124,50 @@ export default function ServiceTable({ serviceRecords, role }) {
           >
             Reset
           </button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 mb-4 px-4 pb-2 border-b border-gray-100">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">Filter by date</label>
+            <select
+              value={dateField}
+              onChange={(e) => setDateField(e.target.value)}
+              className="p-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+            >
+              <option value="complaint">Complaint date</option>
+              <option value="completed">Completed date</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">From</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="p-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-600">To</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="p-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {hasDateFilter && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
+              className="px-3 py-2 rounded-lg bg-slate-200 text-slate-800 text-sm hover:bg-slate-300"
+            >
+              Clear dates
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4 px-4">
@@ -197,7 +260,7 @@ export default function ServiceTable({ serviceRecords, role }) {
               </tr>
             </thead>
             <tbody>
-              {filteredByStatus.length === 0 ? (
+              {filteredByDate.length === 0 ? (
                 <tr>
                   <td
                     colSpan={role === "ADMIN" ? 10 : 9}
@@ -207,7 +270,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                   </td>
                 </tr>
               ) : (
-                filteredByStatus.map((record) => {
+                filteredByDate.map((record) => {
                   const hasReport = record.attachments;
                   let rowBackgroundColor = "";
                   if (record.status?.toUpperCase() === "COMPLETED")
@@ -330,12 +393,12 @@ export default function ServiceTable({ serviceRecords, role }) {
 
         {/* Card view (visible on small screens) */}
         <div className="md:hidden p-4 space-y-4">
-          {filteredByStatus.length === 0 ? (
+          {filteredByDate.length === 0 ? (
             <div className="text-center text-gray-500 py-4">
               No service records found.
             </div>
           ) : (
-            filteredByStatus.map((record) => {
+            filteredByDate.map((record) => {
               const hasReport = record.attachments;
               let cardBackgroundColor = "";
               if (record.status?.toUpperCase() === "COMPLETED")

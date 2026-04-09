@@ -441,8 +441,9 @@ export async function POST(request, context) {
 
       console.log("🛠️ Inserting installation_reports with:", installValues);
 
-      const [installInsert] = await conn.execute(
-        `INSERT INTO installation_reports (
+      try {
+        const [installInsert] = await conn.execute(
+          `INSERT INTO installation_reports (
             service_id,
             installation_date,
             status,
@@ -462,47 +463,57 @@ export async function POST(request, context) {
             customer_designation,
             customer_mobile
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        installValues
-      );
-      console.log("✅ installation_reports inserted | Affected Rows:", installInsert.affectedRows);
+          installValues
+        );
+        console.log("✅ installation_reports inserted | Affected Rows:", installInsert.affectedRows);
+      } catch (installErr) {
+        if (installErr?.code === "ER_DUP_ENTRY" || installErr?.errno === 1062) {
+          console.warn(
+            "[installation_reports] duplicate service_id (record already saved), skipping insert:",
+            serviceId
+          );
+        } else {
+          throw installErr;
+        }
+      }
     }
 
-    // === Email on completion
+    // === Email on completion (never fail the request: DB is already saved above)
     if (status === "COMPLETED") {
-      console.log("📧 Preparing completion email...");
+      try {
+        console.log("📧 Preparing completion email...");
 
-      const [[customerData]] = await conn.execute(
-        `SELECT T1.serial_number, T2.email, T2.installed_address,T2.site_email,T2.site_contact,T2.site_person
+        const [[customerData]] = await conn.execute(
+          `SELECT T1.serial_number, T2.email, T2.installed_address,T2.site_email,T2.site_contact,T2.site_person
          FROM service_records T1
          LEFT JOIN warranty_products T2 
            ON T1.serial_number COLLATE utf8mb4_unicode_ci = T2.serial_number COLLATE utf8mb4_unicode_ci
          WHERE T1.service_id = ?`,
-        [serviceId]
-      );
+          [serviceId]
+        );
 
-      console.log("📨 Customer data for email:", customerData);
+        console.log("📨 Customer data for email:", customerData);
 
-      if (customerData?.email || customerData?.site_email) {
-        const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: +process.env.SMTP_PORT,
-          secure: false,
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        });
+        if (customerData?.email || customerData?.site_email) {
+          const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: +process.env.SMTP_PORT,
+            secure: false,
+            auth: {
+              user: process.env.SMTP_USER,
+              pass: process.env.SMTP_PASS,
+            },
+          });
 
-        // Generate feedback link
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-        const feedbackLink = `${baseUrl}/feedback/${serviceId}`;
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+          const feedbackLink = `${baseUrl}/feedback/${serviceId}`;
 
-        await transporter.sendMail({
-          from: `"Dynaclean Industries" <${process.env.SMTP_USER}>`,
-          to: [customerData.email, customerData.site_email].filter(Boolean).join(","),
-          cc: "service@dynacleanindustries.com",
-          subject: `Service Request Completed with Service ID: ${serviceId}`,
-          html: `
+          await transporter.sendMail({
+            from: `"Dynaclean Industries" <${process.env.SMTP_USER}>`,
+            to: [customerData.email, customerData.site_email].filter(Boolean).join(","),
+            cc: "service@dynacleanindustries.com",
+            subject: `Service Request Completed with Service ID: ${serviceId}`,
+            html: `
             <h2>Service Request Completed</h2>
             <p>Dear Customer, your service has been completed successfully.</p>
             <ul>
@@ -523,11 +534,17 @@ export async function POST(request, context) {
               </p>
             </div>
           `,
-        });
+          });
 
-        console.log("✅ Completion email sent");
-      } else {
-        console.log("⚠️ No customer email found, skipping email");
+          console.log("✅ Completion email sent");
+        } else {
+          console.log("⚠️ No customer email found, skipping email");
+        }
+      } catch (emailErr) {
+        console.error(
+          "❌ Completion email failed (service record was already saved):",
+          emailErr?.message || emailErr
+        );
       }
     }
 
