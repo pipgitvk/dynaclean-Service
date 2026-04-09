@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Eye, CreditCard } from "lucide-react";
 import Modal from "./Model";
 
-export default function ExpenseTable({ rows, role }) {
+export default function ExpenseTable({ rows, role, onRefresh }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -54,9 +54,8 @@ export default function ExpenseTable({ rows, role }) {
   };
 
   const handlePaymentSuccess = () => {
-    // You can update state or fetch the rows again to reflect the change in the table.
-    // Example: setRows(updatedRows);
-    closeModal(); // Close the modal
+    onRefresh?.();
+    closeModal();
   };
 
   return (

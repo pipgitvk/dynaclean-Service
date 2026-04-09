@@ -5,6 +5,16 @@ import { jwtVerify } from 'jose';
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret";
 const secret = new TextEncoder().encode(JWT_SECRET);
 
+export function getJwtSecretBytes() {
+  return new TextEncoder().encode(process.env.JWT_SECRET || "your-secret");
+}
+
+export function getUsernameFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const raw = payload.username ?? payload.sub;
+  return raw != null ? String(raw).trim() : "";
+}
+
 /**
  * Retrieves and verifies the authentication token from cookies,
  * prioritizing the impersonation token.

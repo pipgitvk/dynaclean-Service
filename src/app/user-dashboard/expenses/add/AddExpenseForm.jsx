@@ -28,6 +28,7 @@ export default function AddExpenseForm() {
       const res = await fetch("/api/expenses", {
         method: "POST",
         body: formData,
+        credentials: "include",
       });
 
       const result = await res.json();

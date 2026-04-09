@@ -91,7 +91,10 @@ import { NextResponse } from "next/server";
 // Removed Cloudinary import
 // import { v2 as cloudinary } from "cloudinary";
 import { getDbConnection } from "@/lib/db";
+import { getJwtSecretBytes, getUsernameFromPayload } from "@/lib/auth";
 import { jwtVerify } from "jose";
+import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 import fs from "fs/promises"; // For asynchronous file operations
 import path from "path"; // For path manipulation
 import {
@@ -106,13 +109,50 @@ import {
 
 const UPLOAD_DIR = getExpenseAttachmentsDir();
 
+const EXPENSE_LIST_SQL = `SELECT ID, TravelDate, FromLocation, Tolocation,
+  TicketCost, HotelCost, MealsCost, OtherExpenses,
+  approved_amount, payment_date, approval_status
+  FROM expenses
+  WHERE username = ?
+  ORDER BY TravelDate DESC`;
+
+async function getSessionUserFromCookies() {
+  const cookieStore = await cookies();
+  const token =
+    cookieStore.get("impersonation_token")?.value ||
+    cookieStore.get("token")?.value;
+  if (!token) return null;
+  const { payload } = await jwtVerify(token, getJwtSecretBytes());
+  const username = getUsernameFromPayload(payload);
+  if (!username) return null;
+  const role = payload.role != null ? String(payload.role) : "";
+  return { username, role };
+}
+
+export async function GET() {
+  try {
+    const session = await getSessionUserFromCookies();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const conn = await getDbConnection();
+    // Use query(), not execute() — prepared statements hit a mysql2 ".length" crash in this env.
+    const [result] = await conn.query(EXPENSE_LIST_SQL, [session.username]);
+    const rows = Array.isArray(result) ? result : [];
+    return NextResponse.json({ rows, role: session.role });
+  } catch (err) {
+    console.error("GET /api/expenses:", err);
+    return NextResponse.json({ error: "Failed to load expenses" }, { status: 500 });
+  }
+}
+
 export async function POST(req) {
   try {
-    const token = req.cookies.get("token")?.value;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET));
-    const username = payload.username;
+    const session = await getSessionUserFromCookies();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { username } = session;
 
     const data = await req.formData();
 
@@ -158,7 +198,7 @@ export async function POST(req) {
 
     const conn = await getDbConnection();
 
-    await conn.execute(
+    await conn.query(
       `INSERT INTO expenses (
         username, TravelDate, FromLocation, Tolocation, distance,
         description, person_name, person_contact, ConveyanceMode,
@@ -184,7 +224,7 @@ export async function POST(req) {
       ]
     );
 
-        // await conn.end();
+    revalidatePath("/user-dashboard/expenses");
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -37,10 +37,7 @@ const LoginPage = () => {
         return;
       }
 
-      // Save token (example with cookie)
-      document.cookie = `token=${data.token}; path=/; max-age=7200;`;
-
-      // Redirect based on role
+      // Session cookie is httpOnly from /api/login — do not set token=${data.token} (undefined).
 
       router.push("/user-dashboard");
     } catch (err) {

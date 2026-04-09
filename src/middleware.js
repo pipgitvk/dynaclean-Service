@@ -2,11 +2,15 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+const secret = new TextEncoder().encode(
+  process.env.JWT_SECRET || "your-secret"
+);
 
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get("token")?.value;
+  const token =
+    request.cookies.get("impersonation_token")?.value ||
+    request.cookies.get("token")?.value;
 
   // 🚫 Redirect root "/" → "/login"
   if (pathname === "/") {

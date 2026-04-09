@@ -1,52 +1,53 @@
-import { getDbConnection } from "@/lib/db";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import ExpenseTable from "./ExpenseTable";
-import { getSessionPayload } from "@/lib/auth";
 
-export const dynamic = "force-dynamic";
+export default function ExpensesPage() {
+  const [rows, setRows] = useState([]);
+  const [role, setRole] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-// Server Component
-export default async function ExpensesPage() {
-  let rows = [];
-  let role = "";
-
-  const payload = await getSessionPayload();
-  if (!payload) {
-    return null;
-  }
-
-  const username =
-    payload.username != null ? String(payload.username).trim() : "";
-  role = payload.role != null ? String(payload.role) : "";
-
-  const query = `SELECT ID, TravelDate, FromLocation, Tolocation,
-            TicketCost, HotelCost, MealsCost, OtherExpenses,
-            approved_amount, payment_date, approval_status
-        FROM expenses
-        WHERE username = ?
-        ORDER BY TravelDate DESC;`;
-
-  try {
-    const conn = await getDbConnection();
-    if (!conn || typeof conn.execute !== "function") {
-      throw new Error("Database connection is not available.");
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/expenses", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Could not load expenses");
+        setRows([]);
+        setRole("");
+        return;
+      }
+      setRows(Array.isArray(data.rows) ? data.rows : []);
+      setRole(typeof data.role === "string" ? data.role : "");
+    } catch (e) {
+      console.error(e);
+      setError("Could not load expenses");
+      setRows([]);
+    } finally {
+      setLoading(false);
     }
-    const [result] = await conn.execute(query, [username]);
-    rows = Array.isArray(result) ? result : [];
-  } catch (err) {
-    console.error("ExpensesPage: failed to load expenses:", err);
-    rows = [];
-  }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-700">Expense Entries</h1>
 
-        {/* Button container with flex properties */}
         <div className="flex gap-4">
-          {/* Add Expense button */}
           <a
-            href="expenses/add"
+            href="/user-dashboard/expenses/add"
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
           >
             Add Expense
@@ -54,7 +55,18 @@ export default async function ExpensesPage() {
         </div>
       </div>
 
-      <ExpenseTable rows={rows} role={role} />
+      {loading && (
+        <p className="text-gray-600 mb-4" aria-live="polite">
+          Loading expenses…
+        </p>
+      )}
+      {error && (
+        <p className="text-red-600 mb-4 bg-red-50 border border-red-200 rounded p-3" role="alert">
+          {error}
+        </p>
+      )}
+
+      <ExpenseTable rows={rows} role={role} onRefresh={load} />
     </div>
   );
 }
