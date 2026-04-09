@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getDbConnection } from "@/lib/db";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -546,6 +547,13 @@ export async function POST(request, context) {
           emailErr?.message || emailErr
         );
       }
+    }
+
+    try {
+      revalidatePath("/user-dashboard/view_service_reports");
+      revalidatePath(`/user-dashboard/view-service-report/${serviceId}`);
+    } catch (revErr) {
+      console.warn("[complete-service] revalidatePath:", revErr?.message || revErr);
     }
 
     return NextResponse.json({

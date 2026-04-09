@@ -40,6 +40,8 @@ export default function ViewServiceReport({ params }) {
   const [loading, setLoading] = useState(true);
   const [trainees, setTrainees] = useState([]);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  /** Busts signature image URL when API returns fresh rows (avoids blank image until pm2 restart). */
+  const [sigBust, setSigBust] = useState(0);
 
   const { service_id } = React.use(params);
   useEffect(() => {
@@ -49,6 +51,9 @@ export default function ViewServiceReport({ params }) {
           cache: "no-store",
         });
         const data = await res.json();
+        setSigBust(
+          typeof data.fetchedAt === "number" ? data.fetchedAt : Date.now()
+        );
         setReport(data.record || {});
         setProduct(data.product || {});
         setInstall(data.install || {});
@@ -536,11 +541,19 @@ export default function ViewServiceReport({ params }) {
                 Authorized Person (Engineer)
               </h3>
               {report.authorised_person_sign &&
-                getSignatureImageSrcNoCache(report.authorised_person_sign) && (
+                getSignatureImageSrcNoCache(
+                  report.authorised_person_sign,
+                  sigBust
+                ) && (
                 <img
-                  src={getSignatureImageSrcNoCache(report.authorised_person_sign)}
+                  src={getSignatureImageSrcNoCache(
+                    report.authorised_person_sign,
+                    sigBust
+                  )}
                   alt="Engineer Signature"
                   className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                  loading="eager"
+                  decoding="async"
                 />
               )}
               <ReadRow
@@ -556,11 +569,14 @@ export default function ViewServiceReport({ params }) {
 
             <div>
               <h3 className="text-lg font-semibold mb-3">Customer</h3>
-              {report.customer_sign && getSignatureImageSrcNoCache(report.customer_sign) && (
+              {report.customer_sign &&
+                getSignatureImageSrcNoCache(report.customer_sign, sigBust) && (
                 <img
-                  src={getSignatureImageSrcNoCache(report.customer_sign)}
+                  src={getSignatureImageSrcNoCache(report.customer_sign, sigBust)}
                   alt="Customer Signature"
                   className="w-full h-auto object-contain border border-gray-300 rounded-md mb-4"
+                  loading="eager"
+                  decoding="async"
                 />
               )}
               <ReadRow label="Name" value={report.customer_name || "N/A"} />

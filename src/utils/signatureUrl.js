@@ -13,10 +13,20 @@ export function getSignatureImageSrc(raw) {
   return `/signatures/${s}`;
 }
 
-/** Same URL as getSignatureImageSrc but with ?v= so browsers/proxies don't serve a stale image after re-save */
-export function getSignatureImageSrcNoCache(raw) {
+/**
+ * Same as getSignatureImageSrc but adds cache-busting query params so browsers/proxies
+ * don't keep a blank/stale PNG after a new file is written with the same name.
+ * @param {string|number} [responseBust] - e.g. API `fetchedAt` timestamp (preferred).
+ */
+export function getSignatureImageSrcNoCache(raw, responseBust) {
   const base = getSignatureImageSrc(raw);
   if (!base) return null;
   const v = encodeURIComponent(String(raw).trim());
-  return `${base}${base.includes("?") ? "&" : "?"}v=${v}`;
+  // Prefer API `fetchedAt`; otherwise reuse path as bust so URLs stay stable across re-renders
+  const b =
+    responseBust != null && responseBust !== ""
+      ? String(responseBust)
+      : v;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}v=${v}&bust=${encodeURIComponent(b)}`;
 }

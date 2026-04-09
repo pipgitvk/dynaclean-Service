@@ -7,6 +7,9 @@ import { cookies } from "next/headers";
 import { getSessionPayload } from "@/lib/auth";
 import { getISTCalendarDate } from "@/lib/istDateTime";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ViewServiceReportsPage() {
   let serviceRecords = [];
 

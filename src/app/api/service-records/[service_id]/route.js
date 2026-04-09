@@ -176,6 +176,8 @@ export async function GET(request, context) {
         record: mergedRecord,
         product: warrantyProduct,
         install: installationData,
+        /** Client uses this to bust browser/CDN cache on signature images after save */
+        fetchedAt: Date.now(),
       },
       { headers: noStoreHeaders }
     );
