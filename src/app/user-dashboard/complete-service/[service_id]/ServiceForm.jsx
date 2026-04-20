@@ -6,6 +6,7 @@ import SignaturePad from "signature_pad";
 import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
 import { getSignatureImageSrc } from "@/utils/signatureUrl";
+import { isInstallationReportLayout } from "@/utils/reportLayout";
 
 const signaturePadBoxClass =
   "rounded-lg border-2 border-gray-300 bg-gray-50 p-3 mb-4 shadow-sm";
@@ -577,7 +578,8 @@ export default function ServiceForm({ service }) {
           nature_of_complaints: formData.nature_of_complaint,
           observation: formData.observation,
           action_taken: formData.action_taken,
-          complaint_summary: formData.complaint_summary,
+          complaint_summary:
+            service.complaint_summary || formData.complaint_summary,
           completion_remark: formData.completion_remark,
           replaced: spareParts.map((p) => p.replaced).join(","),
           to_be_replaced: spareParts.map((p) => p.tobereplaced).join(","),
@@ -604,10 +606,26 @@ export default function ServiceForm({ service }) {
           installation_date: service.product?.installation_date,
           invoice_number: service.product?.invoice_number,
           invoice_date: service.product?.invoice_date,
+          contact_person:
+            service.product?.contact_person ||
+            service.product?.site_person ||
+            "",
+          site_person: service.product?.site_person || "",
         };
 
+        const pdfInstallationLayout = isInstallationReportLayout(
+          service.complaint_summary || formData.complaint_summary
+        );
         let installData = null;
-        if (service.service_type === "INSTALLATION") {
+        if (pdfInstallationLayout) {
+          installData = {
+            installation_date: reportServiceDate,
+            defects_on_inspection: formData.defects_found,
+            engineer_remarks: formData.engineers_remark,
+            service_rating: formData.service_rating,
+            customer_feedback: formData.customer_feedback,
+          };
+        } else if (service.service_type === "INSTALLATION") {
           installData = {
             defects_on_inspection: formData.defects_found,
             engineer_remarks: formData.engineers_remark,
@@ -624,11 +642,19 @@ export default function ServiceForm({ service }) {
           hasEngineerSignature: !!engineerSignatureData,
           hasCustomerSignature: !!customerSignatureData,
           engineerSignatureLength: engineerSignatureData?.length,
-          customerSignatureLength: customerSignatureData?.length
+          customerSignatureLength: customerSignatureData?.length,
         });
 
-        const pdf = await generateServiceReportPDF(pdfData, productData, installData, trainees);
-        const filename = `Service_Report_${formData.service_id}_${dayjs().format('YYYY-MM-DD')}.pdf`;
+        const pdf = await generateServiceReportPDF(
+          pdfData,
+          productData,
+          installData,
+          trainees,
+          { isInstallationLayout: pdfInstallationLayout }
+        );
+        const filename = pdfInstallationLayout
+          ? `Installation_Report_${formData.service_id}_${dayjs().format("YYYY-MM-DD")}.pdf`
+          : `Service_Report_${formData.service_id}_${dayjs().format("YYYY-MM-DD")}.pdf`;
         
         // Save PDF to server
         const pdfBlob = pdf.output('blob');

@@ -21,7 +21,9 @@ export async function register() {
           const [result] = await conn.execute(
             `UPDATE attendance_logs
              SET checkout_time = ?,
-                 checkout_address = 'Auto checkout at 6:30 PM'
+                 checkout_address = 'Auto checkout at 6:30 PM',
+                 checkout_latitude = NULL,
+                 checkout_longitude = NULL
              WHERE date = ?
                AND checkin_time IS NOT NULL
                AND checkout_time IS NULL`,

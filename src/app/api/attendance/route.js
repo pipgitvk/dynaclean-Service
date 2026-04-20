@@ -174,7 +174,8 @@ export async function POST(req) {
         break;
 
       case "checkout": {
-        const checkoutAddress = locationAddress || "Auto checkout at 6:30 PM";
+        const checkoutAddress =
+          locationAddress || "Auto checkout at 6:30 PM";
         await conn.execute(
           "UPDATE attendance_logs SET checkout_time = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_address = ? WHERE username = ? AND date = ?",
           [nowIst, latitude ?? null, longitude ?? null, checkoutAddress, username, today]

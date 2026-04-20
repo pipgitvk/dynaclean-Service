@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import FaceCaptureModal from "./FaceCaptureModal";
-import { getISTCalendarDate } from "@/lib/istDateTime";
+import { getISTCalendarDate, isISTAtOrAfterHhMm } from "@/lib/istDateTime";
 
 const AttendanceTracker = ({ username }) => {
   const [attendanceData, setAttendanceData] = useState(null);
@@ -43,28 +43,29 @@ const AttendanceTracker = ({ username }) => {
     fetchAttendance();
   }, [username]);
 
-  // Client-side auto-checkout safety net: if it's past 6:30 PM and user hasn't checked out
+  // Auto checkout at 6:30 PM IST without GPS (server cron is primary; this is a browser fallback)
   useEffect(() => {
     if (!attendanceData) return;
     if (attendanceData.checkout_time) return;
     if (!attendanceData.checkin_time) return;
 
-    const now = new Date();
-    const cutoff = new Date();
-    cutoff.setHours(18, 30, 0, 0); // 6:30 PM
-
-    if (now >= cutoff) {
-      // Trigger auto-checkout from client side as a fallback
+    const runAutoCheckout = () => {
+      if (!isISTAtOrAfterHhMm(new Date(), 18, 30)) return;
       fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, action: "checkout" }),
       })
-        .then((res) => { if (res.ok) fetchAttendance(); })
+        .then((res) => {
+          if (res.ok) fetchAttendance();
+        })
         .catch(() => {});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendanceData]);
+    };
+
+    runAutoCheckout();
+    const intervalId = setInterval(runAutoCheckout, 30_000);
+    return () => clearInterval(intervalId);
+  }, [username, attendanceData?.checkin_time, attendanceData?.checkout_time]);
 
   // Called when Check In button is clicked — open camera first
   const handleCheckinClick = () => {
@@ -137,24 +138,7 @@ const AttendanceTracker = ({ username }) => {
     setEndBreakNotification(null);
 
     if (actionType === "checkout") {
-      setLocationLoading(true);
-      if (!navigator.geolocation) {
-        alert("Geolocation is not supported by your browser.");
-        setLocationLoading(false);
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-          await sendActionWithLocation(actionType, latitude, longitude);
-          setLocationLoading(false);
-        },
-        (err) => {
-          console.error("Location error:", err);
-          alert(`Failed to get location: ${err.message}`);
-          setLocationLoading(false);
-        }
-      );
+      await sendActionWithLocation("checkout");
     } else {
       await sendActionWithLocation(actionType);
     }

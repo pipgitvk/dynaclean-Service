@@ -163,7 +163,8 @@ export async function GET(request, context) {
       const [warrantyRows] = await db.query(
         `SELECT product_name, model, customer_name, email, contact, 
                 customer_address, installed_address, installation_date, 
-                invoice_number, invoice_date
+                invoice_number, invoice_date,
+                contact_person, site_person
          FROM warranty_products 
          WHERE serial_number = ?`,
         [serialNumber]
