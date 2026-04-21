@@ -14,12 +14,42 @@ const AttendanceTracker = ({ username }) => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
 
   // Define break rules here (since we're not fetching them from the backend)
   const breakRules = {
     morning: { start_time: "11:15:00", duration_minutes: 15 },
     lunch: { start_time: "13:30:00", duration_minutes: 30 },
     evening: { start_time: "17:45:00", duration_minutes: 15 },
+  };
+
+  const getOptionalLocation = (timeoutMs = 8000) => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+
+      let done = false;
+      const timerId = setTimeout(() => {
+        if (done) return;
+        done = true;
+        resolve(null);
+      }, timeoutMs);
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timerId);
+          resolve(position.coords);
+        },
+        () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timerId);
+          resolve(null);
+        },
+        { enableHighAccuracy: false, timeout: timeoutMs, maximumAge: 60_000 }
+      );
+    });
   };
 
   // Function to fetch the user's attendance status for today
@@ -138,26 +168,39 @@ const AttendanceTracker = ({ username }) => {
     setEndBreakNotification(null);
 
     if (actionType === "checkout") {
-      await sendActionWithLocation("checkout");
+      setLocationLoading(true);
+      const coords = await getOptionalLocation(8000);
+      setLocationLoading(false);
+      await sendActionWithLocation("checkout", coords?.latitude, coords?.longitude);
     } else {
       await sendActionWithLocation(actionType);
     }
   };
 
   const sendActionWithLocation = async (actionType, latitude, longitude) => {
+    setActionSubmitting(true);
     try {
       const response = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, action: actionType, latitude, longitude }),
       });
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
         fetchAttendance();
       } else {
-        console.error("Failed to perform action:", actionType);
+        console.error("Failed to perform action:", actionType, data);
+        alert(
+          typeof data?.error === "string" && data.error.length > 0
+            ? data.error
+            : "Action failed. Please try again."
+        );
       }
     } catch (error) {
       console.error("API call failed:", error);
+      alert("Network error. Please try again.");
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
@@ -274,10 +317,14 @@ const AttendanceTracker = ({ username }) => {
 
   // Conditional button rendering logic
   const renderActionButton = () => {
-    if (locationLoading || photoUploading) {
+    if (locationLoading || photoUploading || actionSubmitting) {
       return (
         <div className="text-center text-gray-700 font-semibold mb-2 p-3 bg-gray-200 rounded-lg animate-pulse">
-          {photoUploading ? "Saving check-in photo..." : "Getting your location..."}
+          {photoUploading
+            ? "Saving check-in photo..."
+            : locationLoading
+              ? "Getting your location..."
+              : "Processing..."}
         </div>
       );
     }
@@ -285,6 +332,7 @@ const AttendanceTracker = ({ username }) => {
     if (!attendanceData) {
       return (
         <button
+          type="button"
           onClick={handleCheckinClick}
           className={`${buttonClass} bg-blue-600 text-white hover:bg-blue-700`}
         >
@@ -317,6 +365,7 @@ const AttendanceTracker = ({ username }) => {
 
     const checkoutButton = (
       <button
+        type="button"
         onClick={() => handleAction("checkout")}
         className={`${buttonClass} bg-green-600 text-white hover:bg-green-700`}
       >
@@ -326,6 +375,7 @@ const AttendanceTracker = ({ username }) => {
 
     const breakStartButton = (action, label) => (
       <button
+        type="button"
         onClick={() => handleAction(action)}
         className={`${buttonClass} bg-yellow-500 text-gray-800 hover:bg-yellow-600`}
       >
@@ -334,6 +384,7 @@ const AttendanceTracker = ({ username }) => {
     );
     const breakEndButton = (action, label) => (
       <button
+        type="button"
         onClick={() => handleAction(action)}
         className={`${buttonClass} bg-red-500 text-white hover:bg-red-600`}
       >
@@ -409,6 +460,7 @@ const AttendanceTracker = ({ username }) => {
     }
     return (
       <button
+        type="button"
         onClick={() => handleAction("checkout")}
         className={`${buttonClass} bg-green-600 text-white hover:bg-green-700`}
       >
