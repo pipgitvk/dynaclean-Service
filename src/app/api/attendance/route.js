@@ -90,12 +90,14 @@ export async function GET(req) {
       isISTAtOrAfterHhMm(now, 18, 30)
     ) {
       const nowIst = formatISTSqlDateTime(now);
+      // DB trigger attendance_logs_bu_checkout_requires_gps rejects checkout_time with NULL lat/lon.
+      // Reuse check-in coordinates for auto-checkout (same as cron / browser fallback without GPS).
       await conn.execute(
         `UPDATE attendance_logs
          SET checkout_time = ?,
              checkout_address = 'Auto checkout at 6:30 PM',
-             checkout_latitude = NULL,
-             checkout_longitude = NULL
+             checkout_latitude = IFNULL(checkin_latitude, 0),
+             checkout_longitude = IFNULL(checkin_longitude, 0)
          WHERE username = ?
            AND date = ?
            AND checkin_time IS NOT NULL
@@ -221,7 +223,12 @@ export async function POST(req) {
         const checkoutAddress =
           locationAddress || "Auto checkout at 6:30 PM";
         await conn.execute(
-          "UPDATE attendance_logs SET checkout_time = ?, checkout_latitude = ?, checkout_longitude = ?, checkout_address = ? WHERE username = ? AND date = ?",
+          `UPDATE attendance_logs SET
+             checkout_time = ?,
+             checkout_latitude = COALESCE(?, checkin_latitude, 0),
+             checkout_longitude = COALESCE(?, checkin_longitude, 0),
+             checkout_address = ?
+           WHERE username = ? AND date = ?`,
           [nowIst, latitude ?? null, longitude ?? null, checkoutAddress, username, today]
         );
         break;

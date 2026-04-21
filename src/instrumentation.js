@@ -22,8 +22,8 @@ export async function register() {
             `UPDATE attendance_logs
              SET checkout_time = ?,
                  checkout_address = 'Auto checkout at 6:30 PM',
-                 checkout_latitude = NULL,
-                 checkout_longitude = NULL
+                 checkout_latitude = IFNULL(checkin_latitude, 0),
+                 checkout_longitude = IFNULL(checkin_longitude, 0)
              WHERE date = ?
                AND checkin_time IS NOT NULL
                AND (checkout_time IS NULL OR checkout_time = '' OR checkout_time = '0000-00-00 00:00:00')`,
