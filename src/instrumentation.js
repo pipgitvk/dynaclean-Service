@@ -26,7 +26,7 @@ export async function register() {
                  checkout_longitude = NULL
              WHERE date = ?
                AND checkin_time IS NOT NULL
-               AND checkout_time IS NULL`,
+               AND (checkout_time IS NULL OR checkout_time = '' OR checkout_time = '0000-00-00 00:00:00')`,
             [nowIst, today]
           );
 

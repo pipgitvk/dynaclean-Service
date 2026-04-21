@@ -315,6 +315,15 @@ const AttendanceTracker = ({ username }) => {
       );
     }
 
+    const checkoutButton = (
+      <button
+        onClick={() => handleAction("checkout")}
+        className={`${buttonClass} bg-green-600 text-white hover:bg-green-700`}
+      >
+        Check Out
+      </button>
+    );
+
     const breakStartButton = (action, label) => (
       <button
         onClick={() => handleAction(action)}
@@ -334,7 +343,7 @@ const AttendanceTracker = ({ username }) => {
 
     if (!break_morning_start) {
       return (
-        <>
+        <div className="space-y-2">
           {checkinPhotoSrc && (
             <div className="flex justify-center mb-2">
               <img
@@ -345,43 +354,57 @@ const AttendanceTracker = ({ username }) => {
             </div>
           )}
           {breakStartButton("break_morning", "Morning Break")}
-        </>
+          {checkoutButton}
+        </div>
       );
     }
     if (break_morning_start && !break_morning_end) {
       return (
-        <>
+        <div className="space-y-2">
           <div className="text-center text-gray-700 font-semibold mb-2">
             Break in progress: {formatTime(remainingBreakTime)}
           </div>
           {breakEndButton("end_morning", "Morning Break")}
-        </>
+          {checkoutButton}
+        </div>
       );
     }
     if (!break_lunch_start) {
-      return breakStartButton("break_lunch", "Lunch Break");
+      return (
+        <div className="space-y-2">
+          {breakStartButton("break_lunch", "Lunch Break")}
+          {checkoutButton}
+        </div>
+      );
     }
     if (break_lunch_start && !break_lunch_end) {
       return (
-        <>
+        <div className="space-y-2">
           <div className="text-center text-gray-700 font-semibold mb-2">
             Break in progress: {formatTime(remainingBreakTime)}
           </div>
           {breakEndButton("end_lunch", "Lunch Break")}
-        </>
+          {checkoutButton}
+        </div>
       );
     }
     if (!break_evening_start) {
-      return breakStartButton("break_evening", "Evening Break");
+      return (
+        <div className="space-y-2">
+          {breakStartButton("break_evening", "Evening Break")}
+          {checkoutButton}
+        </div>
+      );
     }
     if (break_evening_start && !break_evening_end) {
       return (
-        <>
+        <div className="space-y-2">
           <div className="text-center text-gray-700 font-semibold mb-2">
             Break in progress: {formatTime(remainingBreakTime)}
           </div>
           {breakEndButton("end_evening", "Evening Break")}
-        </>
+          {checkoutButton}
+        </div>
       );
     }
     return (
