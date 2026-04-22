@@ -5,7 +5,6 @@ import { ensureCheckinPhotoColumnStoresLongUrls } from "@/lib/ensureAttendanceSc
 import {
   formatISTSqlDateTime,
   getISTCalendarDate,
-  isISTAtOrAfterHhMm,
   normalizeAttendanceLogTimes,
 } from "@/lib/istDateTime";
 import { NextResponse } from "next/server";
@@ -59,21 +58,11 @@ const uploadPhotoToCloudinary = async (base64Image, username, date) => {
   }
 };
 
-function isMissingAttendanceDateTime(value) {
-  if (value == null) return true;
-  if (value instanceof Date) return Number.isNaN(value.getTime());
-  const s = String(value).trim();
-  if (s === "") return true;
-  if (s.startsWith("0000-00-00")) return true;
-  return false;
-}
-
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const username = searchParams.get("username");
   const conn = await getDbConnection();
-  const now = new Date();
-  const today = getISTCalendarDate(now);
+  const today = getISTCalendarDate();
 
   try {
     const [rows] = await conn.execute(
@@ -81,38 +70,7 @@ export async function GET(req) {
       [username, today]
     );
 
-    let attendanceLog = rows.length > 0 ? rows[0] : null;
-
-    if (
-      attendanceLog &&
-      !isMissingAttendanceDateTime(attendanceLog.checkin_time) &&
-      isMissingAttendanceDateTime(attendanceLog.checkout_time) &&
-      isISTAtOrAfterHhMm(now, 18, 30)
-    ) {
-      const nowIst = formatISTSqlDateTime(now);
-      // DB trigger attendance_logs_bu_checkout_requires_gps rejects checkout_time with NULL lat/lon.
-      // Reuse check-in coordinates for auto-checkout (same as cron / browser fallback without GPS).
-      await conn.execute(
-        `UPDATE attendance_logs
-         SET checkout_time = ?,
-             checkout_address = 'Auto checkout at 6:30 PM',
-             checkout_latitude = IFNULL(checkin_latitude, 0),
-             checkout_longitude = IFNULL(checkin_longitude, 0)
-         WHERE username = ?
-           AND date = ?
-           AND checkin_time IS NOT NULL
-           AND (checkout_time IS NULL OR checkout_time = '' OR checkout_time = '0000-00-00 00:00:00')`,
-        [nowIst, username, today]
-      );
-
-      const [rowsAfter] = await conn.execute(
-        "SELECT * FROM attendance_logs WHERE username = ? AND date = ?",
-        [username, today]
-      );
-      attendanceLog = rowsAfter.length > 0 ? rowsAfter[0] : attendanceLog;
-    }
-
-    attendanceLog = attendanceLog ? normalizeAttendanceLogTimes(attendanceLog) : null;
+    const attendanceLog = rows.length > 0 ? normalizeAttendanceLogTimes(rows[0]) : null;
 
     return NextResponse.json(attendanceLog);
   } catch (error) {

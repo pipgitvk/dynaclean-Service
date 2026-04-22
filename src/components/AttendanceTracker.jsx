@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import FaceCaptureModal from "./FaceCaptureModal";
-import { getISTCalendarDate, isISTAtOrAfterHhMm } from "@/lib/istDateTime";
+import { getISTCalendarDate } from "@/lib/istDateTime";
 
 const AttendanceTracker = ({ username }) => {
   const [attendanceData, setAttendanceData] = useState(null);
@@ -73,34 +73,31 @@ const AttendanceTracker = ({ username }) => {
     fetchAttendance();
   }, [username]);
 
-  // Auto checkout at 6:30 PM IST without GPS (server cron is primary; this is a browser fallback)
+  // Keep dashboard UI in sync without triggering auto-checkout from the browser
   useEffect(() => {
     if (!attendanceData) return;
     if (attendanceData.checkout_time) return;
     if (!attendanceData.checkin_time) return;
 
-    const runAutoCheckout = () => {
-      if (!isISTAtOrAfterHhMm(new Date(), 18, 30)) return;
-      fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, action: "checkout" }),
-      })
-        .then((res) => {
-          if (res.ok) fetchAttendance();
-        })
-        .catch(() => {});
-    };
-
-    runAutoCheckout();
-    const intervalId = setInterval(runAutoCheckout, 30_000);
+    const intervalId = setInterval(() => {
+      fetchAttendance();
+    }, 30_000);
     return () => clearInterval(intervalId);
   }, [username, attendanceData?.checkin_time, attendanceData?.checkout_time]);
 
   // Called when Check In button is clicked — open camera first
-  const handleCheckinClick = () => {
+  const handleCheckinClick = async () => {
     setPreBreakTime(null);
     setEndBreakNotification(null);
+    if (navigator?.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "user" } },
+          audio: false,
+        });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch {}
+    }
     setShowCameraModal(true);
   };
 

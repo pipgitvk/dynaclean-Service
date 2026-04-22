@@ -17,36 +17,91 @@ const FaceCaptureModal = ({ onCapture, onClose }) => {
   const [faceCoveragePercent, setFaceCoveragePercent] = useState(0);
   const [statusMsg, setStatusMsg] = useState("Starting camera...");
   const [faceapiRef, setFaceapiRef] = useState(null);
+  const [cameraError, setCameraError] = useState("");
+  const [cameraStarting, setCameraStarting] = useState(true);
 
-  // Start camera
-  useEffect(() => {
-    let cancelled = false;
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setCameraReady(true);
-        setStatusMsg("Loading face detection...");
-      } catch {
-        setStatusMsg("Camera access denied. Please allow camera permission.");
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setCameraStarting(true);
+    setCameraError("");
+    setCameraReady(false);
+    setFaceDetected(false);
+    setFaceCoveragePercent(0);
+    setModelLoaded(false);
+    setModelError(false);
+    setFaceapiRef(null);
+    setStatusMsg("Starting camera...");
+
+    stopCamera();
+
+    if (typeof window !== "undefined") {
+      const host = window.location.hostname;
+      const isLocalhost =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        host === "::1" ||
+        host.endsWith(".localhost");
+
+      if (window.location.protocol !== "https:" && !isLocalhost) {
+        setCameraError(
+          "Camera access on HTTP (non-localhost) is often blocked. Best option: use HTTPS (ngrok/cloudflared/self-signed SSL)."
+        );
       }
-    };
+    }
+
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setCameraError("Camera is not supported on this browser.");
+      setStatusMsg("Camera is not supported on this browser.");
+      setCameraStarting(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setCameraReady(true);
+      setStatusMsg("Loading face detection...");
+    } catch (e) {
+      const name = e?.name ? String(e.name) : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        setCameraError("Camera permission denied. Tap Allow and choose Allow on the popup.");
+        setStatusMsg("Camera permission denied.");
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setCameraError("No camera found on this device.");
+        setStatusMsg("No camera found.");
+      } else if (name === "NotReadableError") {
+        setCameraError("Camera is busy. Close other apps using camera and try again.");
+        setStatusMsg("Camera is busy.");
+      } else {
+        setCameraError("Could not start camera. Please try again.");
+        setStatusMsg("Could not start camera.");
+      }
+    } finally {
+      setCameraStarting(false);
+    }
+  }, [stopCamera]);
+
+  useEffect(() => {
     startCamera();
     return () => {
-      cancelled = true;
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-      if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+      stopCamera();
     };
-  }, []);
+  }, [startCamera, stopCamera]);
 
   // Load face-api.js model after camera is ready
   useEffect(() => {
@@ -226,8 +281,19 @@ const FaceCaptureModal = ({ onCapture, onClose }) => {
 
           {/* Loading overlay */}
           {!cameraReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/70 text-white text-sm">
-              Starting camera...
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/70 text-white text-sm px-4 text-center gap-3">
+              <div>
+                {cameraStarting ? "Starting camera..." : cameraError || "Starting camera..."}
+              </div>
+              {!cameraStarting && (
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="px-4 py-2 rounded-lg bg-white text-gray-900 font-semibold"
+                >
+                  Allow / Retry
+                </button>
+              )}
             </div>
           )}
         </div>
