@@ -19,14 +19,16 @@ export async function register() {
           const scheduledCheckoutIst = `${today} 18:30:00`;
 
           const [result] = await conn.execute(
-            `UPDATE attendance_logs
-             SET checkout_time = ?,
-                 checkout_address = 'Auto checkout at 6:30 PM',
-                 checkout_latitude = IFNULL(checkin_latitude, 0),
-                 checkout_longitude = IFNULL(checkin_longitude, 0)
-             WHERE date = ?
-               AND checkin_time IS NOT NULL
-               AND (checkout_time IS NULL OR checkout_time = '' OR checkout_time = '0000-00-00 00:00:00')`,
+            `UPDATE attendance_logs al
+             JOIN rep_list rl ON al.username = rl.username
+             SET al.checkout_time = ?,
+                 al.checkout_address = 'Auto checkout at 6:30 PM',
+                 al.checkout_latitude = IFNULL(al.checkin_latitude, 0),
+                 al.checkout_longitude = IFNULL(al.checkin_longitude, 0)
+             WHERE al.date = ?
+               AND rl.userRole = 'SERVICE ENGINEER'
+               AND al.checkin_time IS NOT NULL
+               AND (al.checkout_time IS NULL OR al.checkout_time = '' OR al.checkout_time = '0000-00-00 00:00:00')`,
             [scheduledCheckoutIst, today]
           );
 
