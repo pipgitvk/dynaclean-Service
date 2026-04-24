@@ -39,6 +39,11 @@ export async function getDbConnection() {
       connectionLimit: 100,  // max simultaneous
       queueLimit: 0,
       connectTimeout: 10000,
+      /**
+       * Return DATE/DATETIME as strings (e.g. "2026-04-24 17:37:00") instead of JS Date.
+       * Otherwise JSON serializes Date as ISO UTC ("...Z") and IST wall-clock in MySQL is misread in the browser.
+       */
+      dateStrings: true,
     });
 
     console.log("✅ [DB] Connection pool created");
