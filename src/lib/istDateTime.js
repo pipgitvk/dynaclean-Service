@@ -27,24 +27,7 @@ export function getISTCalendarDate(date = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-/** MySQL DATETIME string in IST wall time (naive), avoids driver storing UTC. */
-export function formatISTSqlDateTime(date = new Date()) {
-  const parts = partsToMap(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: IST,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).formatToParts(date)
-  );
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
-}
-
-/** Columns on `attendance_logs` that store business-local IST wall times. */
+/** Columns on `attendance_logs` that store UTC timestamps. */
 const ATTENDANCE_LOG_DATETIME_FIELDS = [
   "checkin_time",
   "checkout_time",
@@ -56,10 +39,7 @@ const ATTENDANCE_LOG_DATETIME_FIELDS = [
   "break_evening_end",
 ];
 
-/**
- * Ensures API JSON returns IST strings instead of Date serialized as UTC (ISO).
- * Pass-through for null; string values unchanged; Date → formatISTSqlDateTime.
- */
+
 export function normalizeAttendanceLogTimes(row) {
   if (!row) return null;
   const out = { ...row };
@@ -67,7 +47,9 @@ export function normalizeAttendanceLogTimes(row) {
     const v = out[key];
     if (v == null) continue;
     if (v instanceof Date) {
-      out[key] = formatISTSqlDateTime(v);
+      if (!Number.isNaN(v.getTime())) {
+        out[key] = v.toISOString();
+      }
     }
   }
   return out;
@@ -100,10 +82,7 @@ function parseNaiveDateTimeAsUtcDate(s) {
   ));
 }
 
-/**
- * Minutes from midnight for rule checks.
- * Naive "YYYY-MM-DD HH:mm:ss" interpreted as wall-clock by default.
- */
+
 export function parseAttendanceClockMinutes(value) {
   if (value == null || value === "") return null;
   if (value instanceof Date) {
@@ -115,10 +94,6 @@ export function parseAttendanceClockMinutes(value) {
   const naiveUtcDate = parseNaiveDateTimeAsUtcDate(s);
   const hasExplicitTz = /Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s);
   if (naiveUtcDate && !hasExplicitTz) {
-    if (!ATTENDANCE_DB_NAIVE_IS_UTC) {
-      const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-      if (m) return parseInt(m[2], 10) * 60 + parseInt(m[3], 10);
-    }
     const { h, m } = getISTHourMinuteFromDate(naiveUtcDate);
     return h * 60 + m;
   }
@@ -135,16 +110,7 @@ export function formatAttendanceTimeForDisplay(value) {
   if (value == null || value === "") return "";
   const s = String(value).trim();
   const hasExplicitTz = /Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s);
-  if (!hasExplicitTz && !ATTENDANCE_DB_NAIVE_IS_UTC) {
-    const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (m) {
-      const h = parseInt(m[2], 10);
-      const min = parseInt(m[3], 10);
-      const h12 = h % 12 || 12;
-      const period = h >= 12 ? "pm" : "am";
-      return `${String(h12).padStart(2, "0")}:${String(min).padStart(2, "0")} ${period}`;
-    }
-  }
+  
   const d = !hasExplicitTz ? parseNaiveDateTimeAsUtcDate(s) : new Date(value);
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
   return d.toLocaleTimeString("en-IN", {
