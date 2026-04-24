@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
     isHalfDayByRules,
     classifyAttendanceDay,
     parseTimeToMinutes,
+    isMissingCheckoutTime,
   } from "@/lib/attendanceRulesEngine";
   import { 
     formatAttendanceTimeForDisplay as formatTime,
@@ -131,8 +132,12 @@ const AttendancePage = () => {
     
     if (log.type === "present") {
       const logTime = log.checkin_time;
-      if (!logTime) return "bg-orange-50"; // Half day/No checkin
-      
+      if (!logTime) return "bg-orange-50"; // No check-in
+
+      if (isMissingCheckoutTime(log)) {
+        return "bg-yellow-100/50";
+      }
+
       const logM = parseAttendanceClockMinutes(logTime);
       if (logM == null) return "bg-orange-50";
       
@@ -312,7 +317,11 @@ const AttendancePage = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {log.type === "present" ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Present</span>
+                          log.checkin_time && isMissingCheckoutTime(log) ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Half day</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Present</span>
+                          )
                         ) : log.type === "absent" ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Absent</span>
                         ) : log.type === "leave" ? (
