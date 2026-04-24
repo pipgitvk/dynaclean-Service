@@ -17,13 +17,28 @@ import toast from "react-hot-toast";
     parseAttendanceClockMinutes,
   } from "@/lib/istDateTime";
 import AttendanceRegularizeModal from "./AttendanceRegularizeModal";
+import { useUser } from "@/context/UserContext";
 import { Calendar, Filter, RefreshCw, Info, CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react";
 
 const AttendancePage = () => {
+  const { user } = useUser();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  
+  // Default to current month 1st to 30th/last day
+  const [fromDate, setFromDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}-01`;
+  });
+  const [toDate, setToDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
   const [filterStatus, setFilterStatus] = useState("all");
   const [holidays, setHolidays] = useState([]);
   const [leaves, setLeaves] = useState([]);
@@ -288,6 +303,7 @@ const AttendancePage = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-out</th>
@@ -297,11 +313,11 @@ const AttendancePage = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">Loading attendance data...</td>
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">Loading attendance data...</td>
                 </tr>
               ) : allDates.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">No records found for the selected period</td>
+                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">No records found for the selected period</td>
                 </tr>
               ) : (
                 allDates.map((log) => {
@@ -310,10 +326,29 @@ const AttendancePage = () => {
                   
                   const rowColor = getRowColorClass(log);
                   
+                  if (log.type === "sunday") {
+                    return (
+                      <tr key={log.date} className="bg-purple-50/50 hover:brightness-95 transition-all">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {new Date(log.date).toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                          {user?.username || "—"}
+                        </td>
+                        <td colSpan="4" className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="text-purple-700 font-bold text-lg uppercase tracking-widest">Sunday</span>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={log.date} className={`${rowColor} hover:brightness-95 transition-all`}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {new Date(log.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", weekday: "short" })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {user?.username || "—"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {log.type === "present" ? (
