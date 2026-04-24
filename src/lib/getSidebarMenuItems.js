@@ -4,7 +4,6 @@ import { getDbConnection } from "./db";
 
 const allMenuItems = [
   { path: "/user-dashboard", name: "Dashboard", roles: ["ALL"], icon: "Home" },
-  { path: "/user-dashboard/my-profile", name: "My Profile", roles: ["ALL"], icon: "UserCircle" },
   {
     path: "/user-dashboard/profile-approvals",
     name: "Profile approvals",
@@ -18,7 +17,20 @@ const allMenuItems = [
   { path: "/user-dashboard/warranty", name: "Product Console", roles: ["ADMIN", "HR_MANAGER"], icon: "ShieldCheck" },
   { path: "/user-dashboard/quotations", name: "Quotation", roles: ["ALL"], icon: "FileSignature" },
   { path: "/user-dashboard/installation-videos", name: "Installation Videos", roles: ["ALL"], icon: "PlayCircle" },
-  // { path: "/user-dashboard/installation-videos/manage", name: "Manage Video Links", roles: ["ALL"], icon: "FilePlus2" },
+  {
+    path: "/user-dashboard/my-profile",
+    name: "My Profile",
+    roles: ["ALL"],
+    icon: "UserCircle",
+    children: [
+      { path: "/user-dashboard/my-profile", name: "Employee Profile", icon: "UserCircle" },
+      { path: "/user-dashboard/leave", name: "Leaves", icon: "Calendar" },
+       { path: "/user-dashboard/attendance-summary", name: "Attendance Summary", icon: "ClipboardList" },
+      { path: "/user-dashboard/attendance", name: "Attendance", icon: "Clock" },
+      { path: "/user-dashboard/salary", name: "My Salary", icon: "DollarSign" },
+      { path: "/user-dashboard/payslips", name: "My Payslips", icon: "ScrollText" }, 
+    ],
+  },
 ];
 
 export default async function getSidebarMenuItems() {

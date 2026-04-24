@@ -25,6 +25,7 @@
     "next": "^16.1.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-hook-form": "^7.62.0",
