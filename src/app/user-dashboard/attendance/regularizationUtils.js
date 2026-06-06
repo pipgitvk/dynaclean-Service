@@ -1,5 +1,7 @@
 /** India Standard Time */
 const IST = "Asia/Kolkata";
+const ATTENDANCE_DB_NAIVE_IS_UTC =
+  process.env.NEXT_PUBLIC_ATTENDANCE_DB_NAIVE_IS_UTC === "1";
 
 function parseNaiveAsUtc(s) {
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
@@ -21,7 +23,18 @@ export function mysqlDatetimeToDatetimeLocalValue(v) {
   
   let d;
   if (!hasExplicitTz) {
-    d = parseNaiveAsUtc(s);
+    if (ATTENDANCE_DB_NAIVE_IS_UTC) {
+      d = parseNaiveAsUtc(s);
+    } else {
+      // Treat naive datetime as IST wall time
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (m) {
+        const istIso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] ?? "00"}+05:30`;
+        d = new Date(istIso);
+      } else {
+        d = null;
+      }
+    }
   } else {
     d = new Date(v);
   }
@@ -45,7 +58,7 @@ export function mysqlDatetimeToDatetimeLocalValue(v) {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
-/** datetime-local (IST wall-time) → MySQL datetime string in UTC */
+/** datetime-local (IST wall-time) → MySQL datetime string in UTC or naive IST */
 export function datetimeLocalToMysql(v) {
   if (v == null || v === "") return null;
   const t = String(v).trim(); // "YYYY-MM-DDTHH:mm"
@@ -54,12 +67,17 @@ export function datetimeLocalToMysql(v) {
   const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if (!m) return null;
 
-  // Interpret as IST wall-time and convert to UTC for storage
-  const istIso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+05:30`;
-  const d = new Date(istIso);
-  
-  if (Number.isNaN(d.getTime())) return null;
+  if (ATTENDANCE_DB_NAIVE_IS_UTC) {
+    // Interpret as IST wall-time and convert to UTC for storage
+    const istIso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00+05:30`;
+    const d = new Date(istIso);
+    
+    if (Number.isNaN(d.getTime())) return null;
 
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`;
+  } else {
+    // Store as naive IST datetime string
+    return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:00`;
+  }
 }
