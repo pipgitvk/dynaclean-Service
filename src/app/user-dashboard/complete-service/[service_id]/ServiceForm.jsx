@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SignaturePad from "signature_pad";
+import toast from "react-hot-toast";
 import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
 import { getSignatureImageSrc } from "@/utils/signatureUrl";
@@ -294,13 +295,30 @@ export default function ServiceForm({ service }) {
   };
 
   // Location fetching functions
-  const getCurrentLocation = () => {
+  const getCurrentLocation = async () => {
     setIsLocationLoading(true);
     
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by this browser.");
+      toast.error("Geolocation is not supported by this browser.");
       setIsLocationLoading(false);
       return;
+    }
+
+    // Check if permission is already denied before calling getCurrentPosition
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: "geolocation" });
+        if (permissionStatus.state === "denied") {
+          toast.error(
+            "Location permission is blocked. Please enable it in your browser/site settings and try again.",
+            { duration: 5000 }
+          );
+          setIsLocationLoading(false);
+          return;
+        }
+      } catch {
+        // permissions API not available — continue normally
+      }
     }
 
     navigator.geolocation.getCurrentPosition(
