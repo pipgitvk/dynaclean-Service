@@ -1,6 +1,7 @@
 // components/Modal.jsx
 "use client";
 import React, { useEffect, useState } from "react";
+import { getCompletionFileSrc } from "@/utils/signatureUrl";
 
 export default function Modal({
   isOpen,
@@ -269,18 +270,23 @@ export default function Modal({
                   {selectedService.attachments
                     .split(",")
                     .filter(Boolean)
-                    .map((file, index) => (
-                      <li key={index}>
-                        <a
-                          href={`${baseUrl}/completion_files/${file}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          {file}
-                        </a>
-                      </li>
-                    ))}
+                    .map((file, index) => {
+                      const fileUrl = getCompletionFileSrc(file);
+                      if (!fileUrl) return null;
+                      const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${fileUrl}` : fileUrl;
+                      return (
+                        <li key={index}>
+                          <a
+                            href={fullUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {file}
+                          </a>
+                        </li>
+                      );
+                    })}
                 </ul>
               </div>
             )}
@@ -288,41 +294,62 @@ export default function Modal({
               selectedService.installation_report !== "uploadFO" && (
                 <p>
                   <strong>Installation Report:</strong>{" "}
-                  <a
-                    href={`${baseUrl}/completion_files/${selectedService.installation_report}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    {selectedService.installation_report}
-                  </a>
+                  {(() => {
+                    const fileUrl = getCompletionFileSrc(selectedService.installation_report);
+                    if (!fileUrl) return selectedService.installation_report;
+                    const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${fileUrl}` : fileUrl;
+                    return (
+                      <a
+                        href={fullUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        {selectedService.installation_report}
+                      </a>
+                    );
+                  })()}
                 </p>
               )}
 
             {selectedService.pre_completion && (
               <p>
                 <strong>Pre Completion:</strong>{" "}
-                <a
-                  href={`${baseUrl}/completion_files/${selectedService.pre_completion}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  {selectedService.pre_completion}
-                </a>
+                {(() => {
+                  const fileUrl = getCompletionFileSrc(selectedService.pre_completion);
+                  if (!fileUrl) return selectedService.pre_completion;
+                  const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${fileUrl}` : fileUrl;
+                  return (
+                    <a
+                      href={fullUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {selectedService.pre_completion}
+                    </a>
+                  );
+                })()}
               </p>
             )}
             {selectedService.after_completion && (
               <p>
                 <strong>After Completion:</strong>{" "}
-                <a
-                  href={`${baseUrl}/completion_files/${selectedService.after_completion}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  {selectedService.after_completion}
-                </a>
+                {(() => {
+                  const fileUrl = getCompletionFileSrc(selectedService.after_completion);
+                  if (!fileUrl) return selectedService.after_completion;
+                  const fullUrl = baseUrl ? `${baseUrl.replace(/\/$/, "")}${fileUrl}` : fileUrl;
+                  return (
+                    <a
+                      href={fullUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      {selectedService.after_completion}
+                    </a>
+                  );
+                })()}
               </p>
             )}
           </div>

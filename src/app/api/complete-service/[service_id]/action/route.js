@@ -6,6 +6,16 @@ import path from "path";
 import nodemailer from "nodemailer";
 import { v4 as uuidv4 } from "uuid";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "50mb",
+    },
+  },
+};
+
 // Helper to save base64 signature
 const saveSignature = async (dataUrl, serviceId, type) => {
   if (!dataUrl || !dataUrl.startsWith("data:image")) {
@@ -28,6 +38,18 @@ const saveSignature = async (dataUrl, serviceId, type) => {
     console.error(`[saveSignature] ❌ Error saving ${type}:`, err);
     return null;
   }
+};
+
+const INVALID_FS_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+const sanitizeFileName = (name = "") => {
+  const trimmed = String(name).trim();
+  if (!trimmed) return `file-${Date.now()}.bin`;
+  const safe = trimmed
+    .replace(INVALID_FS_CHARS, "_")
+    .replace(/\s+/g, " ")
+    .replace(/\.+$/, "")
+    .slice(0, 180);
+  return safe || `file-${Date.now()}.bin`;
 };
 
 export async function POST(request, context) {
@@ -126,7 +148,8 @@ export async function POST(request, context) {
     const saveFiles = async (files, targetArray, label) => {
       for (const file of files) {
         if (file && file.size > 0) {
-          const fileName = `${uuidv4()}-${file.name}`;
+          const safeOriginal = sanitizeFileName(file.name);
+          const fileName = `${uuidv4()}-${safeOriginal}`;
           const buffer = Buffer.from(await file.arrayBuffer());
           await writeFile(path.join(uploadDir, fileName), buffer);
           targetArray.push(fileName);
@@ -159,6 +182,14 @@ export async function POST(request, context) {
       [serviceId]
     );
     console.log("📄 Existing service_record:", existingRecord);
+
+    if (!existingRecord) {
+      console.error(`❌ [POST] service_record not found for service_id: ${serviceId}`);
+      return NextResponse.json(
+        { status: "error", message: `Service record not found for ID: ${serviceId}` },
+        { status: 404 }
+      );
+    }
 
     const mergeList = (existing, newList) =>
       (existing ? existing.split(",") : [])

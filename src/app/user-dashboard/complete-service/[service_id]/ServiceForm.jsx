@@ -559,7 +559,14 @@ export default function ServiceForm({ service }) {
         }
       );
 
-      if (!response.ok) throw new Error("Failed to save service record.");
+      if (!response.ok) {
+        let errMsg = "Failed to save service record.";
+        try {
+          const errData = await response.json();
+          if (errData?.message) errMsg = errData.message;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       
       // Generate PDF after successful save
       try {
@@ -696,7 +703,8 @@ export default function ServiceForm({ service }) {
       router.push("/user-dashboard/view_service_reports");
     } catch (error) {
       console.error("❌ Submission error:", error);
-      alert("Failed to save service record. Please try again.");
+      const msg = error?.message || "Failed to save service record.";
+      alert(`Failed to save service record.\n${msg}\n\nPlease try again.`);
     } finally {
       setIsLoading(false);
     }

@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import ServiceForm from "./ServiceForm";
 import PdfDownloadButton from "./PdfDownloadButton";
 import UpdateReportButton from "@/components/UpdateReportButton";
+import { getCompletionFileSrc } from "@/utils/signatureUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -176,16 +177,21 @@ export default async function CompleteServicePage({ params }) {
           <div>
             <h3 className="text-lg font-semibold">Attached Images</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
-              {attachments.map((img, index) => (
-                <Image
-                  key={index}
-                  src={`/completion_files/${img}`}
-                  alt="Attached"
-                  width={300}
-                  height={200}
-                  className="rounded border"
-                />
-              ))}
+              {attachments.map((img, index) => {
+                const imgSrc = getCompletionFileSrc(img);
+                if (!imgSrc) return null;
+                return (
+                  <Image
+                    key={index}
+                    src={imgSrc}
+                    alt="Attached"
+                    width={300}
+                    height={200}
+                    className="rounded border"
+                    unoptimized={!imgSrc.startsWith("/")}
+                  />
+                );
+              })}
             </div>
           </div>
         )}
