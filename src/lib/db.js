@@ -1,140 +1,104 @@
 // lib/db.js
 import mysql from "mysql2/promise";
+import dns from "dns/promises";
 
-const g = globalThis;
+let resolvedIp = null;
+let pool = null;
+let poolPromise = null; // guards against concurrent init creating two pools
 
-function requiredEnv(name) {
-  const value = process.env[name];
-  if (!value || value.trim() === "") {
-    throw new Error(`${name} is missing in environment variables.`);
-  }
-  return value;
-}
+// Resolve DB host to IPv4 (once per runtime)
+async function resolveDbHost() {
+  if (resolvedIp) return resolvedIp;
 
-let poolCreationLock = null;
-let isCreatingPool = false;
-
-function createMysqlPool() {
-  const DB_HOST = requiredEnv("DB_HOST");
-  const DB_USER = requiredEnv("DB_USER");
-  const DB_PASSWORD = process.env.DB_PASSWORD ?? "";
-  if (!DB_PASSWORD && process.env.NODE_ENV === "production") {
-    console.warn("⚠️ [DB] DB_PASSWORD is empty — is this intentional in production?");
-  }
-  const DB_NAME = requiredEnv("DB_NAME");
-
-  const pool = mysql.createPool({
-    host: DB_HOST,
-    user: DB_USER,
-    password: DB_PASSWORD,
-    database: DB_NAME,
-    waitForConnections: true,
-    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 1),
-    queueLimit: 0,
-    connectTimeout: 10000,
-    dateStrings: true,
-    enableKeepAlive: true,
-    keepAliveInitialDelay: 30000,
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : undefined,
-  });
-
-  console.log(`✅ [DB] MySQL pool created — host: ${DB_HOST}, db: ${DB_NAME}`);
-  return pool;
-}
-
-async function recreatePool() {
-  if (isCreatingPool && poolCreationLock) {
-    await poolCreationLock;
-    return;
-  }
-
-  let resolveLock;
-  poolCreationLock = new Promise((resolve) => { resolveLock = resolve; });
-  isCreatingPool = true;
+  const host = process.env.DB_HOST;
+  if (!host) throw new Error("DB_HOST is missing in environment variables.");
 
   try {
-    const oldPool = g.__mysqlPool;
-    if (oldPool) {
-      try {
-        await oldPool.end();
-      } catch (err) {
-        console.error("⚠️ [DB] Error closing old pool:", err.message);
-      }
-    }
-    delete g.__mysqlPool;
-    g.__mysqlPool = createMysqlPool();
-  } finally {
-    isCreatingPool = false;
-    resolveLock();
-    poolCreationLock = null;
+    const { address } = await dns.lookup(host, { family: 4 });
+    resolvedIp = address;
+    console.log(`✅ [DB] Resolved ${host} to IPv4: ${resolvedIp}`);
+    return resolvedIp;
+  } catch (err) {
+    console.error("❌ [DB] Failed to resolve DB_HOST:", err);
+    throw new Error("DNS resolution failed for DB_HOST");
   }
 }
 
-function shouldRecreatePool(error) {
-  const code = error?.code || "";
-  if (
-    code === "ER_USER_LIMIT_REACHED" ||
-    code === "ER_TOO_MANY_USER_CONNECTIONS" ||
-    code === "ER_CON_COUNT_ERROR"
-  ) {
-    return false;
-  }
-  return (
-    error?.message?.includes("Pool is closed") ||
-    code === "POOL_CLOSED" ||
-    code === "PROTOCOL_CONNECTION_LOST" ||
-    code === "ECONNRESET" ||
-    code === "ETIMEDOUT"
-  );
+async function createPool() {
+  const host = await resolveDbHost();
+
+  const newPool = mysql.createPool({
+    host,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+
+    waitForConnections: true,
+
+    // Keep pool small on shared hosting to stay within max_connections_per_hour.
+    // max_connections_per_hour counts NEW connections opened per hour — not
+    // concurrent ones. So the goal is to open connections ONCE and keep them
+    // alive as long as possible, never destroying and re-creating them.
+    connectionLimit: 5,
+
+    // Keep idle connections alive in the pool instead of destroying them.
+    // Destroying + re-creating connections wastes the hourly quota.
+    maxIdle: 5,
+
+    // Do NOT set idleTimeout — it destroys idle connections and forces new ones
+    // to be opened on the next request, burning max_connections_per_hour quota.
+
+    // Queue up to 100 requests waiting for a free connection slot.
+    queueLimit: 100,
+
+    connectTimeout: 10000,
+
+    // Send keep-alive packets so the MySQL server doesn't close idle connections
+    // due to wait_timeout — keeps existing connections alive without re-connecting.
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+
+    /**
+     * Return DATE/DATETIME as strings (e.g. "2026-04-24 17:37:00") instead of JS Date.
+     * Otherwise JSON serializes Date as ISO UTC ("...Z") and IST wall-clock in MySQL is misread in the browser.
+     */
+    dateStrings: true,
+  });
+
+  // Debug: physical connection lifecycle tracking
+  newPool.on("connection", () => {
+    console.log("[DB] NEW CONNECTION CREATED");
+  });
+  newPool.on("acquire", () => {
+    console.log("[DB] CONNECTION ACQUIRED");
+  });
+  newPool.on("release", () => {
+    console.log("[DB] CONNECTION RELEASED");
+  });
+  newPool.on("enqueue", () => {
+    console.log("[DB] REQUEST QUEUED");
+  });
+
+  console.log("✅ [DB] Connection pool created (limit: 5, keepAlive: on)");
+  return newPool;
 }
 
 export async function getDbConnection() {
-  if (isCreatingPool && poolCreationLock) {
-    await poolCreationLock;
-  }
-  if (!g.__mysqlPool) {
-    await recreatePool();
-  }
-  return g.__mysqlPool;
-}
+  if (pool) return pool;
 
-export async function dbQuery(sql, params = [], retry = true) {
-  try {
-    const db = await getDbConnection();
-    const [rows] = await db.query(sql, params);
-    return rows;
-  } catch (error) {
-    if (retry && shouldRecreatePool(error)) {
-      await recreatePool();
-      return dbQuery(sql, params, false);
-    }
-    throw error;
+  // Serialize concurrent first-calls so only one pool is ever created
+  if (!poolPromise) {
+    poolPromise = createPool()
+      .then((p) => {
+        pool = p;
+        poolPromise = null;
+        return p;
+      })
+      .catch((err) => {
+        poolPromise = null; // allow retry on next request
+        throw err;
+      });
   }
-}
 
-export async function dbExecute(sql, params = [], retry = true) {
-  try {
-    const db = await getDbConnection();
-    const [result] = await db.execute(sql, params);
-    return result;
-  } catch (error) {
-    if (retry && shouldRecreatePool(error)) {
-      await recreatePool();
-      return dbExecute(sql, params, false);
-    }
-    throw error;
-  }
-}
-
-export async function withPool(callback, retry = true) {
-  try {
-    const db = await getDbConnection();
-    return await callback(db);
-  } catch (error) {
-    if (retry && shouldRecreatePool(error)) {
-      await recreatePool();
-      return withPool(callback, false);
-    }
-    throw error;
-  }
+  return poolPromise;
 }
