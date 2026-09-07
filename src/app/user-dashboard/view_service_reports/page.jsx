@@ -24,12 +24,6 @@ export default async function ViewServiceReportsPage() {
   }
 
   role = payload.role;
-  console.log(
-    "_________________________________________________________________",
-  );
-  console.log("this  is the username:", payload);
-
-  console.log("this is the role: ", role);
   const user = payload.username;
 
   try {
@@ -54,8 +48,6 @@ export default async function ViewServiceReportsPage() {
 `;
 
     const [rows] = await conn.execute(sql, [user]);
-
-    console.log("this is the rows: ", rows);
 
     serviceRecords = rows.map((row) => ({
       ...row,

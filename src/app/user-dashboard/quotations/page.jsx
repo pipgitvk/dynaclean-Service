@@ -58,10 +58,11 @@ export default async function QuotationPage({ searchParams }) {
   if (!payload) return null;
   const username = payload.username;
 
+  const resolvedParams = await searchParams;
   const filters = {
-    search: searchParams?.search ?? "",
-    date_from: searchParams?.date_from ?? "",
-    date_to: searchParams?.date_to ?? "",
+    search: resolvedParams?.search ?? "",
+    date_from: resolvedParams?.date_from ?? "",
+    date_to: resolvedParams?.date_to ?? "",
   };
 
   const quotations = await getQuotations(username, filters);

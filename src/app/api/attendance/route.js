@@ -76,8 +76,6 @@ export async function GET(req) {
   } catch (error) {
     console.error("Database error:", error);
     return NextResponse.json({ error: "Failed to fetch attendance data" }, { status: 500 });
-  } finally {
-    console.log("Database connection closed.");
   }
 }
 
@@ -222,7 +220,5 @@ export async function POST(req) {
       },
       { status: 500 }
     );
-  } finally {
-    console.log("Database connection closed.");
   }
 }
