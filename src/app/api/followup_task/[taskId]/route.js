@@ -73,6 +73,6 @@ export async function POST(req, { params }) {
 
     return new NextResponse("Error saving follow-up", { status: 500 });
   } finally {
-    console.log("Releasing connection back to pool");
+    try { conn.release(); } catch {}
   }
 }
