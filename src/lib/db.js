@@ -1,5 +1,3 @@
-
-
 // lib/db.js
 import mysql from "mysql2/promise";
 import dns from "dns/promises";
@@ -34,20 +32,31 @@ async function createPool() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
+
     waitForConnections: true,
 
-    // Keep this low — shared hosting limits total connections/hour.
-    // 5 connections reused across all concurrent requests is sufficient
-    // for a typical CRM workload; raise only if you observe queue timeouts.
+    // Keep pool small on shared hosting to stay within max_connections_per_hour.
+    // max_connections_per_hour counts NEW connections opened per hour — not
+    // concurrent ones. So the goal is to open connections ONCE and keep them
+    // alive as long as possible, never destroying and re-creating them.
     connectionLimit: 5,
 
-    // Release idle connections back to MySQL after 60 s of inactivity
-    // so they don't count toward max_connections_per_hour across restarts.
-    idleTimeout: 60000,
+    // Keep idle connections alive in the pool instead of destroying them.
+    // Destroying + re-creating connections wastes the hourly quota.
+    maxIdle: 5,
 
-    // How long a request waits in queue for a free connection (10 s)
-    queueLimit: 0,
+    // Do NOT set idleTimeout — it destroys idle connections and forces new ones
+    // to be opened on the next request, burning max_connections_per_hour quota.
+
+    // Queue up to 100 requests waiting for a free connection slot.
+    queueLimit: 100,
+
     connectTimeout: 10000,
+
+    // Send keep-alive packets so the MySQL server doesn't close idle connections
+    // due to wait_timeout — keeps existing connections alive without re-connecting.
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
 
     /**
      * Return DATE/DATETIME as strings (e.g. "2026-04-24 17:37:00") instead of JS Date.
@@ -56,7 +65,21 @@ async function createPool() {
     dateStrings: true,
   });
 
-  console.log("✅ [DB] Connection pool created (limit: 5)");
+  // Debug: physical connection lifecycle tracking
+  newPool.on("connection", () => {
+    console.log("[DB] NEW CONNECTION CREATED");
+  });
+  newPool.on("acquire", () => {
+    console.log("[DB] CONNECTION ACQUIRED");
+  });
+  newPool.on("release", () => {
+    console.log("[DB] CONNECTION RELEASED");
+  });
+  newPool.on("enqueue", () => {
+    console.log("[DB] REQUEST QUEUED");
+  });
+
+  console.log("✅ [DB] Connection pool created (limit: 5, keepAlive: on)");
   return newPool;
 }
 
@@ -65,14 +88,16 @@ export async function getDbConnection() {
 
   // Serialize concurrent first-calls so only one pool is ever created
   if (!poolPromise) {
-    poolPromise = createPool().then((p) => {
-      pool = p;
-      poolPromise = null;
-      return p;
-    }).catch((err) => {
-      poolPromise = null; // allow retry on next request
-      throw err;
-    });
+    poolPromise = createPool()
+      .then((p) => {
+        pool = p;
+        poolPromise = null;
+        return p;
+      })
+      .catch((err) => {
+        poolPromise = null; // allow retry on next request
+        throw err;
+      });
   }
 
   return poolPromise;
