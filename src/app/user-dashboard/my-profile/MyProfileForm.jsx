@@ -792,6 +792,65 @@ export default function MyProfileForm() {
     );
   }
 
+  // ── Condition 1: Profile approved ──────────────────────────────────────────
+  if (approvalStatusLower === "approved") {
+    return (
+      <div className="max-w-2xl mx-auto mt-10">
+        <div className="rounded-2xl bg-white border border-green-200 shadow-lg overflow-hidden">
+          <div className="bg-green-600 px-8 py-6 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white">Profile Approved</h2>
+          </div>
+          <div className="px-8 py-8 text-center space-y-3">
+            <p className="text-gray-600 text-sm">
+              Your profile has been reviewed and approved by HR. No further changes are required.
+            </p>
+            {saved?.full_name && (
+              <p className="text-lg font-semibold text-gray-800">{saved.full_name}</p>
+            )}
+            {saved?.designation && (
+              <p className="text-sm text-gray-500">{saved.designation}{saved?.department ? ` · ${saved.department}` : ""}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Condition 2: Profile submitted but pending / under review ──────────────
+  if (saved && approvalStatusLower && approvalStatusLower !== "rejected" && approvalStatusLower !== "reassign" && approvalStatusLower !== "revision_requested") {
+    return (
+      <div className="max-w-2xl mx-auto mt-10">
+        <div className="rounded-2xl bg-white border border-amber-200 shadow-lg overflow-hidden">
+          <div className="bg-amber-500 px-8 py-6 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white">Profile Under Review</h2>
+          </div>
+          <div className="px-8 py-8 text-center space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-4 py-1.5 text-sm font-medium text-amber-800">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+              {getInReviewStatusLabel(approvalStatusLower)}
+            </div>
+            <p className="text-gray-600 text-sm max-w-sm mx-auto">
+              Your profile has been submitted and is currently under HR review. You will be notified once it is approved.
+            </p>
+            {saved?.full_name && (
+              <p className="text-base font-semibold text-gray-800 mt-2">{saved.full_name}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form
       ref={formRef}
