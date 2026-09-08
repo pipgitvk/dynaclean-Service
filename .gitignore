@@ -5,3 +5,7 @@ dist/
 build/
 *.log
 public/
+.env
+.env.local
+.env*.local
+.env.production.local

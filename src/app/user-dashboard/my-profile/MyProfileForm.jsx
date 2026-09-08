@@ -222,6 +222,221 @@ function hasPickedFile(fileVal) {
   );
 }
 
+// ─── Read-only View Profile Modal ───────────────────────────────────────────
+
+const VIEW_SECTIONS = [
+  {
+    title: "Employment Details",
+    fields: [
+      { label: "Employee Code", key: "employee_code" },
+      { label: "Username", key: "username" },
+      { label: "Emp ID", key: "empId" },
+      { label: "Designation", key: "designation" },
+      { label: "Date of Joining", key: "date_of_joining" },
+      { label: "Work Location", key: "work_location" },
+      { label: "Department", key: "department" },
+      { label: "Reporting Manager", key: "reporting_manager" },
+      { label: "Employment Status", key: "employment_status" },
+      { label: "Probation Period", key: "probation_period" },
+      { label: "Source / Reference", key: "source_reference" },
+      { label: "Employment Type", key: "is_experienced", format: (v) => (v === true || v === 1 || v === "1" ? "Experienced" : "Fresher") },
+    ],
+  },
+  {
+    title: "Personal Details",
+    fields: [
+      { label: "Name Prefix", key: "name_prefix" },
+      { label: "Full Name", key: "full_name" },
+      { label: "Date of Birth", key: "date_of_birth" },
+      { label: "Marital Status", key: "marital_status" },
+      { label: "Blood Group", key: "blood_group" },
+      { label: "Email", key: "email" },
+      { label: "Contact Mobile", key: "contact_mobile" },
+      { label: "Contact Landline", key: "contact_landline" },
+      { label: "Father's Name", key: "father_name" },
+      { label: "Father's Phone", key: "father_phone" },
+      { label: "Mother's Name", key: "mother_name" },
+      { label: "Mother's Phone", key: "mother_phone" },
+      { label: "Emergency Contact Name", key: "emergency_contact_name" },
+      { label: "Emergency Contact Number", key: "emergency_contact_number" },
+      { label: "Near Police Station", key: "near_police_station" },
+    ],
+  },
+  {
+    title: "Address",
+    fields: [
+      { label: "Correspondence Address", key: "correspondence_address" },
+      { label: "Permanent Address", key: "permanent_address" },
+    ],
+  },
+  {
+    title: "Banking & Tax",
+    fields: [
+      { label: "PAN Number", key: "pan_number" },
+      { label: "Aadhaar Number", key: "aadhaar_number", fallback: "aadhar_number" },
+      { label: "PF UAN", key: "pf_uan" },
+      { label: "ESIC Number", key: "esic_number" },
+      { label: "Name as per Bank", key: "name_as_per_bank" },
+      { label: "Bank Name", key: "bank_name" },
+      { label: "IFSC Code", key: "ifsc_code" },
+      { label: "Bank Account Number", key: "bank_account_number" },
+    ],
+  },
+];
+
+const VIEW_DOCS = [
+  { label: "PAN Card", key: "pan_card" },
+  { label: "Voter ID", key: "voter_id" },
+  { label: "Aadhaar Card", key: "aadhaar_card" },
+  { label: "Electricity Bill", key: "electricity_bill" },
+  { label: "Rent Agreement", key: "rent_agreement" },
+  { label: "Police Verification", key: "police_verification" },
+  { label: "10th Certificate", key: "cert_10th" },
+  { label: "12th Certificate", key: "cert_12th" },
+  { label: "Diploma / Degree", key: "diploma_cert" },
+  { label: "Technical Certificate", key: "tech_cert" },
+  { label: "Appointment Letter (Prev)", key: "appt_letter_prev" },
+  { label: "Experience Letter", key: "exp_letter" },
+  { label: "Relieving Letter", key: "relieving_letter" },
+  { label: "Salary Slips", key: "salary_slips" },
+  { label: "Cancelled Cheque / Passbook", key: "cancelled_cheque" },
+  { label: "Profile Photo", key: "profile_photo" },
+  { label: "Signature", key: "signature" },
+];
+
+function ViewProfileModal({ saved, educationRows, onClose }) {
+  // close on backdrop click
+  const handleBackdrop = (e) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  const val = (field) => {
+    let v = saved?.[field.key];
+    if ((v == null || v === "") && field.fallback) v = saved?.[field.fallback];
+    if (v == null || v === "") return null;
+    return field.format ? field.format(v) : String(v);
+  };
+
+  const uploadedDocs = VIEW_DOCS.filter(({ key }) => {
+    const url = getSavedDocUrl(saved, key);
+    return url && url.trim() !== "";
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[9998] flex items-start justify-center bg-black/50 p-4 overflow-y-auto"
+      onClick={handleBackdrop}
+    >
+      <div className="relative w-full max-w-3xl my-8 rounded-2xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between bg-gray-900 px-6 py-4">
+          <h2 className="text-lg font-semibold text-white">Profile Details (Read-only)</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-300 hover:text-white text-2xl leading-none"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="overflow-y-auto max-h-[80vh] p-6 space-y-8">
+          {/* Text field sections */}
+          {VIEW_SECTIONS.map((section) => {
+            const rows = section.fields.map((f) => ({ ...f, value: val(f) })).filter((f) => f.value);
+            if (rows.length === 0) return null;
+            return (
+              <div key={section.title}>
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">
+                  {section.title}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {rows.map((f) => (
+                    <div key={f.key} className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+                      <p className="text-[11px] text-gray-500 mb-0.5">{f.label}</p>
+                      <p className="text-sm font-medium text-gray-800 break-words">{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Education rows */}
+          {Array.isArray(educationRows) && educationRows.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">
+                Qualification Details
+              </h3>
+              <div className="space-y-2">
+                {educationRows.map((row, i) => (
+                  <div key={row.id || i} className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">Qualification {i + 1}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-gray-800">
+                      {row.exam_name && <span><span className="text-[11px] text-gray-500 block">Exam / Degree</span>{row.exam_name}</span>}
+                      {row.board_university && <span><span className="text-[11px] text-gray-500 block">Board / University</span>{row.board_university}</span>}
+                      {row.year_of_passing && <span><span className="text-[11px] text-gray-500 block">Year</span>{row.year_of_passing}</span>}
+                      {row.grade_percentage && <span><span className="text-[11px] text-gray-500 block">Grade / %</span>{row.grade_percentage}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Uploaded documents */}
+          {uploadedDocs.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">
+                Uploaded Documents
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {uploadedDocs.map(({ label, key }) => {
+                  const url = getSavedDocUrl(saved, key);
+                  const isImage = /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url);
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-green-600 text-sm">✓</span>
+                        <span className="text-sm text-gray-700 truncate">{label}</span>
+                      </div>
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 rounded-md bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                      >
+                        {isImage ? "View Image" : "View / Download"}
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!saved && (
+            <p className="text-center text-gray-500 text-sm py-8">No profile data found.</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 bg-gray-50 px-6 py-3 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg bg-gray-800 px-5 py-2 text-sm font-medium text-white hover:bg-gray-900"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DocRow ──────────────────────────────────────────────────────────────────
 function DocRow({ label, required, name, register, existingUrl, watch }) {
   const picked = watch ? watch(name) : undefined;
   const checked = Boolean(existingUrl) || hasPickedFile(picked);
@@ -261,6 +476,7 @@ export default function MyProfileForm() {
   const [statusModal, setStatusModal] = useState("");
   const [isClient, setIsClient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const formRef = useRef(null);
 
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -622,8 +838,33 @@ export default function MyProfileForm() {
           document.body,
         )}
 
+      {isClient &&
+        showViewModal &&
+        createPortal(
+          <ViewProfileModal
+            saved={saved}
+            educationRows={educationRows}
+            onClose={() => setShowViewModal(false)}
+          />,
+          document.body,
+        )}
+
       <div className="rounded-xl bg-white p-4 md:p-6 shadow-md border border-sky-100">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">My Profile</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">My Profile</h1>
+          {saved && (
+            <button
+              type="button"
+              onClick={() => setShowViewModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors shadow-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+              View Profile
+            </button>
+          )}
+        </div>
         {approvalStatus && (
           <div
             className={`mt-3 rounded-lg border px-3 py-2 text-sm ${
@@ -663,16 +904,75 @@ export default function MyProfileForm() {
       </div>
 
       {showWaitingOnly ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-8 md:p-12 text-center shadow-sm">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-700">
-            🕒
+        <section className="rounded-2xl border border-slate-200 bg-white p-8 md:p-12 shadow-sm space-y-6">
+          <div className="text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-700">
+              🕒
+            </div>
+            <h2 className="text-2xl font-semibold text-gray-900">{getInReviewStatusLabel(approvalStatusLower)}</h2>
+            <p className="mt-3 text-sm text-gray-600 max-w-2xl mx-auto">
+              {approvalStatusLower === "pending_admin"
+                ? "HR has sent your submission for final review. Profile details will be visible after final admin approval."
+                : "Your profile is under review. You can see your submitted details below."}
+            </p>
           </div>
-          <h2 className="text-2xl font-semibold text-gray-900">{getInReviewStatusLabel(approvalStatusLower)}</h2>
-          <p className="mt-3 text-sm text-gray-600 max-w-2xl mx-auto">
-            {approvalStatusLower === "pending_admin"
-              ? "HR has sent your submission for final review. Profile details will be visible after final admin approval."
-              : "Your profile is under review. Profile details will stay hidden until final admin approval."}
-          </p>
+
+          {/* Read-only summary of saved profile */}
+          {saved && (
+            <div className="border-t border-slate-100 pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">Submitted Profile Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {saved.full_name && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Full Name</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.full_name}</p>
+                  </div>
+                )}
+                {saved.employment_status && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Employment Status</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.employment_status}</p>
+                  </div>
+                )}
+                {saved.designation && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Designation</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.designation}</p>
+                  </div>
+                )}
+                {saved.department && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Department</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.department}</p>
+                  </div>
+                )}
+                {saved.date_of_joining && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Date of Joining</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.date_of_joining}</p>
+                  </div>
+                )}
+                {saved.contact_mobile && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Contact Mobile</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.contact_mobile}</p>
+                  </div>
+                )}
+                {saved.work_location && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Work Location</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.work_location}</p>
+                  </div>
+                )}
+                {saved.reporting_manager && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">Reporting Manager</p>
+                    <p className="text-sm font-medium text-gray-800 bg-gray-50 rounded-lg px-3 py-2">{saved.reporting_manager}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       ) : (
       <fieldset

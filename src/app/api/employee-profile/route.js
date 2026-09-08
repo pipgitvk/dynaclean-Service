@@ -319,9 +319,41 @@ function enrichProfileWithDocStorage(profile) {
   }
   if (Array.isArray(joining)) {
     for (const item of joining) {
-      if (!item || typeof item !== "object") continue;
-      const url = item.url;
-      const docKey = item.docKey;
+      let url = null;
+      let docKey = null;
+
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        // Expected format: { docKey, url }
+        url = item.url;
+        docKey = item.docKey;
+      } else if (typeof item === "string" && item.trim()) {
+        // Plain URL string format: "/employee_profiles/user/doc_pan_card_12345.jpeg"
+        // Extract docKey from filename prefix (e.g. "doc_pan_card")
+        url = item.trim();
+        const filename = url.split("/").pop() || "";
+        // filename looks like: doc_pan_card_1766666383063.jpeg
+        // Match known doc keys by prefix
+        for (const key of Object.keys(EMPCRM_DOC_KEY_TO_LOGICAL)) {
+          if (filename.startsWith(key + "_") || filename.startsWith(key + ".")) {
+            docKey = key;
+            break;
+          }
+        }
+        // Also handle profile_photo and signature which are not in EMPCRM_DOC_KEY_TO_LOGICAL
+        if (!docKey) {
+          if (filename.startsWith("profile_photo")) {
+            const existing = profile["profile_photo"];
+            if (!existing || String(existing).trim() === "") profile["profile_photo"] = url;
+            continue;
+          }
+          if (filename.startsWith("signature")) {
+            const existing = profile["signature"];
+            if (!existing || String(existing).trim() === "") profile["signature"] = url;
+            continue;
+          }
+        }
+      }
+
       if (!url || !docKey) continue;
       const logical = EMPCRM_DOC_KEY_TO_LOGICAL[docKey];
       if (!logical) continue;
