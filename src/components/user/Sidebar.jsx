@@ -24,6 +24,7 @@ import {
   UserCheck,
   Clock,
   Calendar,
+  Eye,
 } from "lucide-react";
 
 // Icon map
@@ -44,6 +45,7 @@ const iconMap = {
   UserCheck,
   Clock,
   Calendar,
+  Eye,
 };
 
 export default function Sidebar({ isOpen, menuItems, onCloseSidebar }) {

@@ -23,7 +23,8 @@ const allMenuItems = [
     roles: ["ALL"],
     icon: "UserCircle",
     children: [
-      { path: "/user-dashboard/my-profile", name: "Employee Profile", icon: "UserCircle" },
+      { path: "/user-dashboard/my-profile", name: "Add Profile", icon: "UserCircle" },
+      { path: "/user-dashboard/my-profile/view-profile", name: "My Profile", icon: "Eye" },
       { path: "/user-dashboard/leave", name: "Leaves", icon: "Calendar" },
        { path: "/user-dashboard/attendance-summary", name: "Attendance Summary", icon: "ClipboardList" },
       { path: "/user-dashboard/attendance", name: "Attendance", icon: "Clock" },
