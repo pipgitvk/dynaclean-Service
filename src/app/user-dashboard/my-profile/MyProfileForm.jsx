@@ -385,6 +385,28 @@ function ViewProfileModal({ saved, educationRows, onClose }) {
             </div>
           )}
 
+          {/* References */}
+          {Array.isArray(saved?.references_json) && saved.references_json.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 border-b border-gray-100 pb-1">
+                Reference Verification Details
+              </h3>
+              <div className="space-y-2">
+                {saved.references_json.map((ref, i) => (
+                  <div key={i} className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">Reference {i + 1}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-gray-800">
+                      {ref.name && <span><span className="text-[11px] text-gray-500 block">Name</span>{ref.name}</span>}
+                      {ref.contact && <span><span className="text-[11px] text-gray-500 block">Contact</span>{ref.contact}</span>}
+                      {ref.address && <span><span className="text-[11px] text-gray-500 block">Address</span>{ref.address}</span>}
+                      {ref.relationship && <span><span className="text-[11px] text-gray-500 block">Relationship</span>{ref.relationship}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Uploaded documents */}
           {uploadedDocs.length > 0 && (
             <div>

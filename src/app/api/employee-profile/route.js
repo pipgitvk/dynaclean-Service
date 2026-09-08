@@ -450,6 +450,37 @@ async function loadLatestEmpcrmSubmissionRow(conn, username, empId) {
   return rows[0] ?? null;
 }
 
+/** Fetch references from employee_references child table and attach as profile.references_json */
+async function mergeReferencesFromChildTable(conn, profile) {
+  if (!profile) return;
+  const profileId = profile.id ?? profile.ID;
+  if (profileId == null || profileId === "") return;
+
+  try {
+    const refCols = await loadTableColumnSet(conn, "employee_references");
+    if (!refCols.has("profile_id")) return;
+
+    const selectCols = ["reference_name", "reference_mobile", "reference_address", "relationship", "reference_type"]
+      .filter((c) => refCols.has(c));
+    if (selectCols.length === 0) return;
+
+    const orderBy = refCols.has("display_order") ? " ORDER BY `display_order` ASC" : "";
+    const [rows] = await conn.execute(
+      `SELECT ${selectCols.map((c) => `\`${c}\``).join(", ")} FROM employee_references WHERE profile_id = ?${orderBy}`,
+      [profileId],
+    );
+    if (rows.length > 0) {
+      profile.references_json = rows.map((r) => ({
+        name: r.reference_name ?? "",
+        contact: r.reference_mobile ?? "",
+        address: r.reference_address ?? "",
+        relationship: r.relationship ?? "",
+        reference_type: r.reference_type ?? "",
+      }));
+    }
+  } catch { /* table may not exist */ }
+}
+
 export async function GET(req) {
   try {
     const username = await getSessionUsername(req);
@@ -498,6 +529,7 @@ export async function GET(req) {
     if (profile) {
       enrichProfileWithDocStorage(profile);
       await mergeEducationFromChildTable(conn, profile, columnSet);
+      await mergeReferencesFromChildTable(conn, profile);
       const approvalCol = resolveDbColumn("profile_approval_status", columnSet);
       if (!approvalCol) {
         const latestSub = await loadLatestEmpcrmSubmissionRow(conn, username, empId);
