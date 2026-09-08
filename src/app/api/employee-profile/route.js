@@ -511,7 +511,27 @@ export async function GET(req) {
         if (latestSub?.reassigned_fields != null) profile.reassigned_fields = latestSub.reassigned_fields;
       }
     }
-    return NextResponse.json({ profile, username, empId, columns: [...columnSet] });
+    // Also check employee_profile_submissions table for this user
+    let profileInSubmissions = false;
+    try {
+      const subColSet = await loadSubmissionColumnNames(conn);
+      if (subColSet.size > 0) {
+        const subWhere = [];
+        const subVals = [];
+        if (subColSet.has("username") && username) { subWhere.push("username = ?"); subVals.push(username); }
+        const subEmpCol = subColSet.has("empId") ? "empId" : subColSet.has("emp_id") ? "emp_id" : null;
+        if (subEmpCol && empId) { subWhere.push(`\`${subEmpCol}\` = ?`); subVals.push(empId); }
+        if (subWhere.length > 0) {
+          const [subRows] = await conn.execute(
+            `SELECT id FROM employee_profile_submissions WHERE ${subWhere.join(" OR ")} LIMIT 1`,
+            subVals,
+          );
+          if (subRows.length > 0) profileInSubmissions = true;
+        }
+      }
+    } catch { /* submissions table may not exist */ }
+
+    return NextResponse.json({ profile, username, empId, columns: [...columnSet], profileInSubmissions });
   } catch (e) {
     console.error("[employee-profile GET]", e);
     const msg = e?.sqlMessage || e?.message || "Server error";

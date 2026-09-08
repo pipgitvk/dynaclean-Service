@@ -477,6 +477,7 @@ export default function MyProfileForm() {
   const [isClient, setIsClient] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [profileInSubmissions, setProfileInSubmissions] = useState(false);
   const formRef = useRef(null);
 
   const { register, handleSubmit, reset, watch, setValue } = useForm();
@@ -494,6 +495,7 @@ export default function MyProfileForm() {
         if (!res.ok) throw new Error(data.error || "Failed to load profile");
         if (cancelled) return;
         setColumns(data.columns || []);
+        if (data.profileInSubmissions) setProfileInSubmissions(true);
         const initial = data.profile || {
           username: data.username || "",
           empId: data.empId ?? "",
@@ -793,7 +795,12 @@ export default function MyProfileForm() {
   }
 
   // ── Condition 1: Profile approved ──────────────────────────────────────────
-  if (approvalStatusLower === "approved") {
+  // Show approved screen if status is "approved" OR if profile row exists with no status
+  // (means HR hasn't set up approval column but profile is filled in DB)
+  const profileExists = hasPersistedProfileRow(saved) || profileInSubmissions;
+  const isApproved = approvalStatusLower === "approved" || (profileExists && !approvalStatusLower);
+
+  if (isApproved) {
     return (
       <div className="max-w-2xl mx-auto mt-10">
         <div className="rounded-2xl bg-white border border-green-200 shadow-lg overflow-hidden">
@@ -822,7 +829,14 @@ export default function MyProfileForm() {
   }
 
   // ── Condition 2: Profile submitted but pending / under review ──────────────
-  if (saved && approvalStatusLower && approvalStatusLower !== "rejected" && approvalStatusLower !== "reassign" && approvalStatusLower !== "revision_requested") {
+  // Show pending screen if profile row exists and status is a review/pending status
+  const isPending = profileExists &&
+    approvalStatusLower &&
+    approvalStatusLower !== "rejected" &&
+    approvalStatusLower !== "reassign" &&
+    approvalStatusLower !== "revision_requested";
+
+  if (isPending) {
     return (
       <div className="max-w-2xl mx-auto mt-10">
         <div className="rounded-2xl bg-white border border-amber-200 shadow-lg overflow-hidden">
