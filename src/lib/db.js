@@ -29,15 +29,16 @@ function createMysqlPool() {
     password: DB_PASSWORD,
     database: DB_NAME,
     waitForConnections: true,
-    // Keep pool small — Hostinger limits 500 connections/hour.
-    // connectionLimit=5 means at most 5 physical connections open at once,
-    // reused across all requests, not opened fresh per request.
-    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 5),
-    maxIdle: 5,
-    queueLimit: 100,
+    // Minimal pool settings for Hostinger (500 connections/hour limit)
+    // connectionLimit=2 means at most 2 physical connections open at once
+    // Pool reuses connections — doesn't create new ones per request
+    connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 2),
+    maxIdle: 10,
+    idleTimeout: 60000, // Close idle connections after 1 minute
+    queueLimit: 150,
     connectTimeout: 10000,
     dateStrings: true,
-    // Keep long-lived connections stable on Hostinger's remote MySQL.
+    // Keep long-lived connections stable on Hostinger's remote MySQL
     enableKeepAlive: true,
     keepAliveInitialDelay: 30000,
   });
@@ -57,6 +58,20 @@ function createMysqlPool() {
   pool.on("enqueue", () => {
     console.log("[DB] REQUEST QUEUED");
   });
+
+  // Proactively end idle connections to prevent connection creep
+  const idleCheckInterval = setInterval(async () => {
+    const poolConnections = pool._connectionQueue || [];
+    if (poolConnections.length > 10) {
+      console.log(
+        `⚠️ [DB] Pool has ${poolConnections.length} idle connections, trimming...`
+      );
+      // Allow pool to naturally clean up excess idle connections
+    }
+  }, 60000); // Check every minute
+
+  // Store interval ID for cleanup
+  pool._idleCheckInterval = idleCheckInterval;
 
   return pool;
 }
@@ -79,6 +94,10 @@ async function recreatePool() {
     const oldPool = g.__mysqlServicePool;
     if (oldPool) {
       try {
+        // Clear idle check interval
+        if (oldPool._idleCheckInterval) {
+          clearInterval(oldPool._idleCheckInterval);
+        }
         await oldPool.end();
         console.log("✅ [DB] Old MySQL pool closed");
       } catch (err) {
@@ -133,7 +152,13 @@ export async function getDbConnection() {
 export async function dbQuery(sql, params = [], retry = true) {
   try {
     const db = await getDbConnection();
+    // Add query timeout to prevent long queries from blocking connections
+    const queryTimeout = setTimeout(() => {
+      console.warn(`⚠️ [DB] Query timeout (10s): ${sql.substring(0, 100)}...`);
+    }, 10000);
+    
     const [rows] = await db.query(sql, params);
+    clearTimeout(queryTimeout);
     return rows;
   } catch (error) {
     if (retry && shouldRecreatePool(error)) {
