@@ -343,7 +343,7 @@ export default function LeavePage() {
               <table className="min-w-full divide-y divide-gray-200 text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    {["Leave Type", "From", "To", "Days", "Reason", "Status", "Actions"].map((h) => (
+                    {["Leave Type", "From", "To", "Days", "Reason", "Created By", "Status", "Actions"].map((h) => (
                       <th
                         key={h}
                         className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide"
@@ -364,7 +364,8 @@ export default function LeavePage() {
                       <td className="px-3 py-3 text-gray-700">{formatDate(leave.from_date)}</td>
                       <td className="px-3 py-3 text-gray-700">{formatDate(leave.to_date)}</td>
                       <td className="px-3 py-3 text-gray-700">{leave.total_days ?? leave.days}</td>
-                      <td className="px-3 py-3 text-gray-700 max-w-[180px] truncate">{leave.reason}</td>
+                      <td className="px-3 py-3 text-gray-700">{leave.reason}</td>
+                      <td className="px-3 py-3 text-gray-700 text-xs">{leave.created_by || "—"}</td>
                       <td className="px-3 py-3">{getStatusBadge(leave.status)}</td>
                       <td className="px-3 py-3">
                         {leave.status === "pending" && (
@@ -413,6 +414,12 @@ export default function LeavePage() {
                     <p className="text-xs text-gray-400">Reason</p>
                     <p className="text-sm text-gray-700">{leave.reason}</p>
                   </div>
+                  {leave.created_by && (
+                    <div>
+                      <p className="text-xs text-gray-400">Created By</p>
+                      <p className="text-sm text-gray-700">{leave.created_by}</p>
+                    </div>
+                  )}
                   {leave.status === "pending" && (
                     <button
                       onClick={() => handleDelete(leave.id)}
