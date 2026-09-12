@@ -7,6 +7,12 @@ import {
   datetimeLocalToMysql,
 } from "./regularizationUtils";
 
+const REGULARIZATION_REASONS = [
+  { value: "software_issue", label: "Software issue" },
+  { value: "power_outage", label: "Power outage" },
+  { value: "wifi_issue", label: "WiFi issue" },
+];
+
 export default function AttendanceRegularizeModal({
   open,
   log,
@@ -39,6 +45,11 @@ export default function AttendanceRegularizeModal({
     const r = reason.trim();
     if (!r) {
       toast.error("Reason is required.");
+      return;
+    }
+
+    if (!file) {
+      toast.error("Image/document attachment is mandatory.");
       return;
     }
 
@@ -104,6 +115,11 @@ export default function AttendanceRegularizeModal({
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <p className="text-sm text-red-800 font-medium">
+              ⚠️ Note: Regularization is only for system issues, not for late arrival and early leave from office.
+            </p>
+          </div>
           <p className="text-sm text-gray-600">
             Date:{" "}
             <span className="font-medium text-gray-900">
@@ -150,28 +166,34 @@ export default function AttendanceRegularizeModal({
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Reason <span className="text-red-600">*</span>
             </label>
-            <textarea
+            <select
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              rows={3}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-              placeholder="Why are you correcting this day?"
-            />
+            >
+              <option value="">Select a reason</option>
+              {REGULARIZATION_REASONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Attachment (optional)
+              Attach Screenshot with Date/Time <span className="text-red-600">*</span>
             </label>
             <input
               key={fileInputKey}
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              required
               className="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-teal-50 file:text-teal-800"
             />
             <p className="mt-1 text-xs text-gray-500">
-              PDF, JPG, PNG, or WebP — max 5 MB (optional)
+              PDF, JPG, PNG, or WebP — max 5 MB (required)
             </p>
           </div>
           <div className="flex gap-2 justify-end pt-2">

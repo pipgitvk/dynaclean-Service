@@ -18,7 +18,7 @@ import toast from "react-hot-toast";
   } from "@/lib/istDateTime";
 import AttendanceRegularizeModal from "./AttendanceRegularizeModal";
 import { useUser } from "@/context/UserContext";
-import { Calendar, Filter, RefreshCw, Info, CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react";
+import { Calendar, Filter, RefreshCw, Info, CheckCircle, XCircle, Clock, AlertTriangle, Gift, X } from "lucide-react";
 
 const AttendancePage = () => {
   const { user } = useUser();
@@ -41,19 +41,22 @@ const AttendancePage = () => {
   });
   const [filterStatus, setFilterStatus] = useState("all");
   const [holidays, setHolidays] = useState([]);
-  const [leaves, setLeaves] = useState([]);
+  const [attendanceLeaves, setAttendanceLeaves] = useState([]); // leaves used for attendance date building (from /attendance/fetch)
+  const [approvedLeaves, setApprovedLeaves] = useState([]); // all approved leaves from /empcrm/leaves
   const [rules, setRules] = useState(DEFAULT_ATTENDANCE_RULES);
   const [myRegRequests, setMyRegRequests] = useState([]);
   const [regModalOpen, setRegModalOpen] = useState(false);
   const [regModalLog, setRegModalLog] = useState(null);
   const [regModalDateKey, setRegModalDateKey] = useState("");
+  const [holidaysModalOpen, setHolidaysModalOpen] = useState(false);
 
   const fetchAttendance = async () => {
     setLoading(true);
     try {
-      const [response, rulesRes] = await Promise.all([
+      const [response, rulesRes, leavesRes] = await Promise.all([
         fetch("/api/empcrm/attendance/fetch"),
         fetch("/api/empcrm/attendance-rules"),
+        fetch("/api/empcrm/leaves"),
       ]);
 
       if (!response.ok) {
@@ -64,17 +67,23 @@ const AttendancePage = () => {
       const data = await response.json();
       setLogs(data.attendance || []);
       setHolidays(data.holidays || []);
-      setLeaves(data.leaves || []);
+      setAttendanceLeaves(data.leaves || []);
 
       if (rulesRes.ok) {
         const rulesData = await rulesRes.json().catch(() => ({}));
         if (rulesData.rules) setRules(rulesData.rules);
       }
+
+      if (leavesRes.ok) {
+        const leavesData = await leavesRes.json().catch(() => ({}));
+        if (leavesData.leaves) setApprovedLeaves(leavesData.leaves);
+      }
     } catch (err) {
       toast.error(err.message);
       setLogs([]);
       setHolidays([]);
-      setLeaves([]);
+      setAttendanceLeaves([]);
+      setApprovedLeaves([]);
     } finally {
       setLoading(false);
     }
@@ -92,16 +101,51 @@ const AttendancePage = () => {
     }
   }, []);
 
+
+
   useEffect(() => {
     fetchAttendance();
   }, []);
 
   useEffect(() => {
-    if (!loading) refreshRegularization();
+    if (!loading) {
+      refreshRegularization();
+      // Also refresh approved leaves when attendance updates
+      const fetchApprovedLeaves = async () => {
+        try {
+          const res = await fetch("/api/empcrm/leaves");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.leaves) setApprovedLeaves(data.leaves);
+          }
+        } catch (err) {
+          console.error("Error fetching leaves:", err);
+        }
+      };
+      fetchApprovedLeaves();
+    }
   }, [loading, refreshRegularization]);
 
   const logDateKeyForReg = (log) =>
     log?.date ? new Date(log.date).toLocaleDateString("en-CA") : "";
+
+  // Check if a date has an approved paid half-day leave
+  const getPaidHalfDayLeave = (logDate) => {
+    if (!logDate || !approvedLeaves || approvedLeaves.length === 0) return null;
+    
+    const dateStr = new Date(logDate).toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    return approvedLeaves.find((leave) => {
+      if (leave.status !== "approved") return false;
+      if (!leave.is_half_day) return false;
+      if (leave.leave_type !== "paid") return false;
+      
+      const fromStr = new Date(leave.from_date).toISOString().split('T')[0];
+      const toStr = new Date(leave.to_date).toISOString().split('T')[0];
+      
+      return dateStr >= fromStr && dateStr <= toStr;
+    });
+  };
 
   const pendingRegByDate = useMemo(() => {
     const m = new Map();
@@ -189,7 +233,7 @@ const AttendancePage = () => {
       holidays.map((h) => [new Date(h.holiday_date).toLocaleDateString("en-CA"), h])
     );
     const leaveMap = new Map();
-    leaves.forEach((leave) => {
+    attendanceLeaves.forEach((leave) => {
       const start = new Date(leave.from_date);
       const end = new Date(leave.to_date);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -217,24 +261,34 @@ const AttendancePage = () => {
       }
     }
     return dates.reverse();
-  }, [logs, holidays, leaves, fromDate, toDate]);
+  }, [logs, holidays, attendanceLeaves, fromDate, toDate]);
 
   const summary = useMemo(() => {
-    const acc = { present: 0, absent: 0, leave: 0, holiday: 0, sunday: 0, halfDay: 0, late: 0 };
+    const acc = { present: 0, absent: 0, leave: 0, holiday: 0, sunday: 0, halfDay: 0, late: 0, paidHalfDay: 0 };
     let graceHalfDaysUsed = 0;
     allDates.forEach((log) => {
       if (log.type === "present") {
         acc.present++;
         const cls = classifyAttendanceDay(log, rules, graceHalfDaysUsed);
         graceHalfDaysUsed = cls.graceHalfDaysUsed;
-        if (cls.kind === "halfDay") acc.halfDay++;
+        if (cls.kind === "halfDay") {
+          // Check if this half day is from a paid leave
+          const paidLeave = getPaidHalfDayLeave(log.date);
+          if (paidLeave) {
+            acc.paidHalfDay++;
+          } else {
+            acc.halfDay++;
+          }
+        }
         if (cls.kind === "lateDay") acc.late++;
+      } else if (log.type === "leave" && log.is_half_day) {
+        acc.paidHalfDay++;
       } else if (acc[log.type] !== undefined) {
         acc[log.type]++;
       }
     });
     return acc;
-  }, [allDates, rules]);
+  }, [allDates, rules, approvedLeaves, getPaidHalfDayLeave]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -247,6 +301,13 @@ const AttendancePage = () => {
           <p className="text-gray-600 mt-2">Track your daily logs, leaves, and holidays</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHolidaysModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium transition-colors"
+          >
+            <Gift className="w-4 h-4" />
+            Holiday List
+          </button>
           <button
             onClick={fetchAttendance}
             className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
@@ -263,8 +324,8 @@ const AttendancePage = () => {
           { label: "Absent", value: summary.absent, color: "text-red-600", bg: "bg-red-50" },
           { label: "Half Day", value: summary.halfDay, color: "text-orange-600", bg: "bg-orange-50" },
           { label: "Late", value: summary.late, color: "text-yellow-600", bg: "bg-yellow-50" },
-          { label: "Leave", value: summary.leave, color: "text-blue-600", bg: "bg-blue-50" },
-          { label: "Holiday", value: summary.holiday, color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "Leave", value: summary.leave, color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "Holiday", value: summary.holiday, color: "text-indigo-600", bg: "bg-indigo-50" },
           { label: "Sunday", value: summary.sunday, color: "text-gray-600", bg: "bg-gray-50" },
         ].map((item) => (
           <div key={item.label} className={`${item.bg} p-4 rounded-xl border border-gray-100 shadow-sm`}>
@@ -353,14 +414,22 @@ const AttendancePage = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {log.type === "present" ? (
                           log.checkin_time && isMissingCheckoutTime(log) ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Half day</span>
+                            getPaidHalfDayLeave(log.date) ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Paid Half day</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Half day</span>
+                            )
                           ) : (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Present</span>
                           )
                         ) : log.type === "absent" ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Absent</span>
                         ) : log.type === "leave" ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Leave ({log.leaveType})</span>
+                          log.is_half_day ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Paid Half day ({log.leaveType})</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Leave ({log.leaveType})</span>
+                          )
                         ) : log.type === "holiday" ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Holiday ({log.holidayTitle})</span>
                         ) : (
@@ -378,6 +447,8 @@ const AttendancePage = () => {
                           <span className="text-yellow-600 flex items-center gap-1 font-medium">
                             <Clock className="w-4 h-4" /> Pending Approval
                           </span>
+                        ) : log.type === "leave" && !log.is_half_day ? (
+                          <span className="text-gray-500">—</span>
                         ) : (
                           <button
                             onClick={() => openRegularizeModal(log)}
@@ -406,6 +477,61 @@ const AttendancePage = () => {
           refreshRegularization();
         }}
       />
+
+      {/* Holidays Modal */}
+      {holidaysModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <Gift className="w-5 h-5 text-purple-600" />
+                Holiday List
+              </h2>
+              <button
+                onClick={() => setHolidaysModalOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Holiday list */}
+            <div className="overflow-y-auto flex-1">
+              {holidays.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-10">No holidays found</p>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Holiday</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {[...holidays]
+                      .sort((a, b) => new Date(a.holiday_date) - new Date(b.holiday_date))
+                      .map((h, i) => {
+                        const d = new Date(h.holiday_date);
+                        const isPast = d < new Date();
+                        return (
+                          <tr key={i} className={isPast ? "opacity-50" : "bg-purple-50/30"}>
+                            <td className="px-5 py-3 text-sm text-gray-500">{i + 1}</td>
+                            <td className="px-5 py-3 text-sm font-medium text-gray-800">
+                              {d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", weekday: "short" })}
+                            </td>
+                            <td className="px-5 py-3 text-sm text-gray-700">{h.title}</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

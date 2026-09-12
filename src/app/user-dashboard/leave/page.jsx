@@ -21,9 +21,12 @@ export default function LeavePage() {
     leave_type: "unpaid",
     from_date: "",
     to_date: "",
+    start_time: "",
+    end_time: "",
     reason: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [specifyTimes, setSpecifyTimes] = useState(false);
 
   useEffect(() => {
     fetchLeaves();
@@ -62,15 +65,34 @@ export default function LeavePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.leave_type || !formData.from_date || !formData.to_date || !formData.reason.trim()) {
-      alert("Please fill in all fields");
+      alert("Please fill in all required fields");
       return;
     }
+
     try {
       setSubmitting(true);
+      
+      // Build from_date with start_time (if toggle is on)
+      let fromDateTime = formData.from_date;
+      if (specifyTimes && formData.start_time) {
+        fromDateTime = `${formData.from_date}T${formData.start_time}:00`;
+      }
+
+      // Build to_date with end_time (if toggle is on)
+      let toDateTime = formData.to_date;
+      if (specifyTimes && formData.end_time) {
+        toDateTime = `${formData.to_date}T${formData.end_time}:00`;
+      }
+
       const response = await fetch("/api/empcrm/leaves", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          leave_type: formData.leave_type,
+          from_date: fromDateTime,
+          to_date: toDateTime,
+          reason: formData.reason,
+        }),
       });
       const data = await response.json();
       if (data.success) {
@@ -81,8 +103,11 @@ export default function LeavePage() {
           leave_type: enabledLeaves[0]?.type || "unpaid",
           from_date: "",
           to_date: "",
+          start_time: "",
+          end_time: "",
           reason: "",
         });
+        setSpecifyTimes(false);
         fetchLeaves();
         fetchStats();
       } else {
@@ -471,6 +496,48 @@ export default function LeavePage() {
                 <p className="text-sm text-blue-600 font-medium">
                   Total: {totalDays} day{totalDays > 1 ? "s" : ""}
                 </p>
+              )}
+
+              {/* Toggle for Start/End Time */}
+              <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <label className="text-sm font-medium text-gray-700">Specify Start & End Time</label>
+                <button
+                  type="button"
+                  onClick={() => setSpecifyTimes(!specifyTimes)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    specifyTimes ? "bg-blue-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      specifyTimes ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Start and End Time - Only show when toggle is ON */}
+              {specifyTimes && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                    <input
+                      type="time"
+                      value={formData.start_time}
+                      onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                    <input
+                      type="time"
+                      value={formData.end_time}
+                      onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
               )}
 
               {/* Reason */}

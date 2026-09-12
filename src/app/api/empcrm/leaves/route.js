@@ -156,10 +156,82 @@ export async function POST(request) {
       leavePolicy = {};
     }
 
-    // Calculate total days
+    // Fetch employee's lunch break timing from attendance schedule
+    const [scheduleRows] = await conn.execute(
+      `SELECT break_lunch, lunch_duration_minutes FROM employee_attendance_schedule WHERE username = ? LIMIT 1`,
+      [session.username]
+    );
+
+    let lunchStart = "12:00"; // Default lunch start
+    let lunchDurationMins = 30;  // Default lunch duration
+
+    if (scheduleRows.length > 0) {
+      const schedule = scheduleRows[0];
+      if (schedule.break_lunch) {
+        lunchStart = schedule.break_lunch;
+      }
+      if (schedule.lunch_duration_minutes) {
+        lunchDurationMins = Number(schedule.lunch_duration_minutes);
+      }
+    }
+
+    // Convert lunch times to minutes for comparison
+    const lunchStartParts = lunchStart.split(":").map(Number);
+    const lunchStartMins = lunchStartParts[0] * 60 + (lunchStartParts[1] || 0);
+    const lunchEndMins = lunchStartMins + lunchDurationMins;
+
+    // Calculate total days based on from_date and to_date
+    // If times are specified, calculate partial days
     const fromDate = new Date(from_date);
     const toDate = new Date(to_date);
-    const totalDays = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+    
+    let totalDays = 0;
+    let isHalfDay = 0;
+    
+    // Extract time components if they exist
+    const fromHour = fromDate.getHours();
+    const fromMinute = fromDate.getMinutes();
+    const toHour = toDate.getHours();
+    const toMinute = toDate.getMinutes();
+    
+    const fromTimeMins = fromHour * 60 + fromMinute;
+    const toTimeMins = toHour * 60 + toMinute;
+    
+    const hasStartTime = fromHour !== 0 || fromMinute !== 0;
+    const hasEndTime = toHour !== 0 || toMinute !== 0;
+    
+    if (hasStartTime && hasEndTime) {
+      // Check if leave starts after lunch break (partial day)
+      // If from_time >= lunch_end, it's 1.5 days
+      const isStartAfterLunch = fromTimeMins >= lunchEndMins;
+      
+      // Full day Ms calculation
+      const fullDayMs = 24 * 60 * 60 * 1000;
+      const timeDiffMs = toDate - fromDate;
+      const calculatedDays = timeDiffMs / fullDayMs;
+      
+      if (isStartAfterLunch) {
+        // Started after lunch - so it's 1.5 days (today half + tomorrow full)
+        totalDays = 1.5;
+        isHalfDay = 0; // Don't mark as half day, just deduct 1.5 days
+      } else if (calculatedDays < 1) {
+        // Less than 1 full day
+        totalDays = 1;
+        isHalfDay = 0;
+      } else if (calculatedDays < 1.5) {
+        // Between 1 and 1.5 days
+        totalDays = 1.5;
+        isHalfDay = 0;
+      } else {
+        // For full days, round normally
+        totalDays = Math.round(calculatedDays * 2) / 2; // Round to nearest 0.5
+        isHalfDay = 0;
+      }
+    } else {
+      // No times or only partial - use full day calculation
+      totalDays = Math.ceil((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
+      isHalfDay = 0;
+    }
 
     if (totalDays <= 0) {
       return NextResponse.json(
@@ -212,8 +284,8 @@ export async function POST(request) {
     // Insert leave application
     const [result] = await conn.execute(
       `INSERT INTO employee_leaves 
-       (username, empId, full_name, leave_type, from_date, to_date, total_days, reason) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (username, empId, full_name, leave_type, from_date, to_date, total_days, reason, is_half_day) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         session.username,
         empId,
@@ -222,7 +294,8 @@ export async function POST(request) {
         from_date,
         to_date,
         totalDays,
-        reason
+        reason,
+        isHalfDay
       ]
     );
 
@@ -393,7 +466,9 @@ export async function PATCH(request) {
     if (status === "approved" && leave?.leave_type === "unpaid") {
       try {
         const username = leave.username;
-        const totalDays = Number(leave.total_days || 0);
+        // Use total_days directly from database - don't convert
+        const totalDays = parseFloat(leave.total_days) || 0;
+        
         if (username && totalDays > 0) {
           // Fetch active salary structure
           const [structRows] = await conn.execute(
@@ -418,7 +493,8 @@ export async function PATCH(request) {
                   Number(s.special_allowance || 0) +
                   Number(s.bonus || 0);
             const perDay = monthly / 26;
-            const amount = Math.round(perDay * totalDays);
+            // Keep the exact decimal value for calculation
+            const amount = Math.round(perDay * totalDays * 100) / 100;
 
             // Ensure deduction type exists for unpaid leave
             const [typeRows] = await conn.execute(
