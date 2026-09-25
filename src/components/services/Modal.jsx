@@ -228,17 +228,40 @@ export default function Modal({
               </p>
             )} */}
 
-            {/* Service Report Link */}
+            {/* Service Report Links */}
             <p>
               <strong>Completion Report:</strong>{" "}
-              <a
-                href={`/user-dashboard/view-service-report/${selectedService.service_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-purple-600 hover:underline"
-              >
-                View Completion Report
-              </a>
+              {String(selectedService.report_ids || "")
+                .split(",")
+                .map((id) => id.trim())
+                .filter(Boolean).length > 0 ? (
+                String(selectedService.report_ids)
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter(Boolean)
+                  .map((id, index, arr) => (
+                    <span key={id}>
+                      <a
+                        href={`/user-dashboard/view-service-report/${selectedService.service_id}?reportId=${id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-600 hover:underline"
+                      >
+                        {id}
+                      </a>
+                      {index < arr.length - 1 ? ", " : ""}
+                    </span>
+                  ))
+              ) : (
+                <a
+                  href={`/user-dashboard/view-service-report/${selectedService.service_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-purple-600 hover:underline"
+                >
+                  View Completion Report
+                </a>
+              )}
             </p>
 
             {/* Feedback Form Link */}

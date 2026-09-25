@@ -34,15 +34,14 @@ export default async function ViewServiceReportsPage() {
     wp.customer_name AS customer_name_from_wp,
     wp.installed_address AS installed_address_from_wp,
     wp.email, wp.contact, wp.invoice_date, wp.product_name, wp.specification, wp.model,
-    wp.site_email,wp.site_contact,wp.site_person,
-    sr_report.final_report_path AS my_report,
-    CASE
-        WHEN sr_report.service_id IS NOT NULL THEN 1
-        ELSE 0
-    END AS view_status
+    wp.site_email, wp.site_contact, wp.site_person,
+    (
+      SELECT GROUP_CONCAT(srp.id ORDER BY srp.id SEPARATOR ',')
+      FROM service_reports srp
+      WHERE srp.service_id = sr.service_id
+    ) AS report_ids
   FROM service_records sr
   LEFT JOIN warranty_products wp ON sr.serial_number COLLATE utf8mb4_unicode_ci = wp.serial_number
-  LEFT JOIN service_reports sr_report ON sr.service_id = sr_report.service_id
   WHERE sr.assigned_to = ?
   ORDER BY sr.service_id DESC;
 `;

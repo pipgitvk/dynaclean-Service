@@ -106,6 +106,38 @@ export default function ServiceTable({ serviceRecords, role }) {
 
   const hasDateFilter = Boolean(dateFrom || dateTo);
 
+  const parseReportIds = (reportIds) =>
+    String(reportIds || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+  const renderReportLinks = (record) => {
+    const ids = parseReportIds(record.report_ids);
+    if (!ids.length) {
+      return <span className="text-gray-400">—</span>;
+    }
+    return (
+      <div className="flex flex-wrap gap-x-2 gap-y-1">
+        {ids.map((id, index) => (
+          <span key={id}>
+            <a
+              href={`/user-dashboard/view-service-report/${record.service_id}?reportId=${id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline font-medium"
+            >
+              {id}
+            </a>
+            {index < ids.length - 1 ? "," : ""}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const tableColSpan = role === "ADMIN" ? 11 : 10;
+
   return (
     <div className="flex justify-center items-center bg-gray-50 py-6 px-4">
       <div className="bg-white shadow-xl rounded-lg w-full overflow-hidden">
@@ -251,6 +283,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                 >
                   Complete Date {getSortIndicator("completed_date")}
                 </th>
+                <th className="px-6 py-3 text-left">Reports</th>
                 {role === "ADMIN" && (
                   <th className="px-6 py-3 text-left">Company Cost</th>
                 )}
@@ -263,7 +296,7 @@ export default function ServiceTable({ serviceRecords, role }) {
               {filteredByDate.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={role === "ADMIN" ? 10 : 9}
+                    colSpan={tableColSpan}
                     className="px-6 py-3 text-center text-gray-500"
                   >
                     No service records found.
@@ -297,6 +330,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                       <td className="px-6 py-3">
                         {formatDate(record.completed_date)}
                       </td>
+                      <td className="px-6 py-3">{renderReportLinks(record)}</td>
 
                       {role === "ADMIN" && (
                         <td className="px-6 py-3">
@@ -315,42 +349,21 @@ export default function ServiceTable({ serviceRecords, role }) {
 
                       <td className="px-6 py-3 text-right text-sm font-medium">
                         <div className="flex flex-col space-y-2">
-                          {record.status?.toUpperCase() !== "COMPLETED" ? (
-                            <>
-                              {role === "ADMIN" && (
-                                <Link
-                                  href={`/user-dashboard/assign-service/${record.service_id}`}
-                                  className="inline-block px-3 py-1 text-sm bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center"
-                                >
-                                  Assign
-                                </Link>
-                              )}
+                          {role === "ADMIN" &&
+                            record.status?.toUpperCase() !== "COMPLETED" && (
                               <Link
-                                href={`/user-dashboard/complete-service/${record.service_id}`}
-                                className="inline-block px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
+                                href={`/user-dashboard/assign-service/${record.service_id}`}
+                                className="inline-block px-3 py-1 text-sm bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center"
                               >
-                                Complete Service
+                                Assign
                               </Link>
-                            </>
-                          ) : record.final_report_path ? (
-                            <a
-                              href={record.final_report_path}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-2 text-sm bg-green-700 text-white rounded-md hover:bg-green-800 text-center"
-                            >
-                              View Report
-                            </a>
-                          ) : (
-                            <a
-                              href={`/user-dashboard/view-service-report/${record.service_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-3 py-2 text-sm bg-green-700 text-white rounded-md hover:bg-green-800 text-center"
-                            >
-                              View Report
-                            </a>
-                          )}
+                            )}
+                          <Link
+                            href={`/user-dashboard/complete-service/${record.service_id}`}
+                            className="inline-block px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
+                          >
+                            + Make Report
+                          </Link>
                           {(record.status?.toUpperCase() ===
                             "PENDING FOR SPARES" 
                             || record.status?.toUpperCase() === "COMPLETED"
@@ -461,6 +474,12 @@ export default function ServiceTable({ serviceRecords, role }) {
                       </span>{" "}
                       {record.installed_address}
                     </p>
+                    <p className="text-gray-500 mt-1">
+                      <span className="font-semibold text-gray-700">
+                        Reports:
+                      </span>{" "}
+                      {renderReportLinks(record)}
+                    </p>
                   </div>
                   {role === "ADMIN" && (
                     <div className="border-t border-gray-200 pt-2">
@@ -482,42 +501,21 @@ export default function ServiceTable({ serviceRecords, role }) {
                     </div>
                   )}
                   <div className="flex flex-col space-y-2 mt-4">
-                    {record.status?.toUpperCase() !== "COMPLETED" ? (
-                      <>
-                        {role === "ADMIN" && (
-                          <Link
-                            href={`/user-dashboard/assign-service/${record.service_id}`}
-                            className="px-3 py-2 text-sm bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center"
-                          >
-                            Assign
-                          </Link>
-                        )}
+                    {role === "ADMIN" &&
+                      record.status?.toUpperCase() !== "COMPLETED" && (
                         <Link
-                          href={`/user-dashboard/complete-service/${record.service_id}`}
-                          className="px-3 py-2 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
+                          href={`/user-dashboard/assign-service/${record.service_id}`}
+                          className="px-3 py-2 text-sm bg-indigo-500 text-white rounded-md hover:bg-indigo-600 text-center"
                         >
-                          Complete Service
+                          Assign
                         </Link>
-                      </>
-                    ) : record.final_report_path ? (
-                      <a
-                        href={record.final_report_path}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        View Report
-                      </a>
-                    ) : (
-                      <a
-                        href={`/user-dashboard/view-service-report/${record.service_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-2 text-sm bg-green-700 text-white rounded-md hover:bg-green-800 text-center"
-                      >
-                        View Report
-                      </a>
-                    )}
+                      )}
+                    <Link
+                      href={`/user-dashboard/complete-service/${record.service_id}`}
+                      className="px-3 py-2 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
+                    >
+                      + Make Report
+                    </Link>
                     {(record.status?.toUpperCase() === "PENDING FOR SPARES" ||
                       record.status?.toUpperCase() === "COMPLETED") && (
                       <Link

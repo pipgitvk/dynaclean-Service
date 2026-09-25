@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
@@ -45,6 +46,8 @@ export default function ViewServiceReport({ params }) {
   const [sigBust, setSigBust] = useState(0);
 
   const { service_id } = React.use(params);
+  const searchParams = useSearchParams();
+  const reportId = searchParams.get("reportId");
 
   const installationLayout = isInstallationReportLayout(
     report?.complaint_summary
@@ -58,7 +61,10 @@ export default function ViewServiceReport({ params }) {
   useEffect(() => {
     const fetchReport = async () => {
       try {
-        const res = await fetch(`/api/service-records/${service_id}`, {
+        const apiUrl = reportId
+          ? `/api/service-records/${service_id}?reportId=${reportId}`
+          : `/api/service-records/${service_id}`;
+        const res = await fetch(apiUrl, {
           cache: "no-store",
         });
         const data = await res.json();
@@ -81,7 +87,7 @@ export default function ViewServiceReport({ params }) {
     };
 
     fetchReport();
-  }, [service_id]);
+  }, [service_id, reportId]);
 
   const transformTraineeData = (installData) => {
     const names = installData.trainee_names
@@ -323,7 +329,10 @@ export default function ViewServiceReport({ params }) {
                       report.completed_date
                   )}
                 />
-                <ReadRow label="Report ID" value={report.service_id} />
+                <ReadRow
+                  label="Report ID"
+                  value={report.report_db_id || reportId || "—"}
+                />
                 <ReadRow label="Customer Name" value={product.customer_name} />
                 <ReadRow label="Address" value={product.customer_address} />
                 <ReadRow

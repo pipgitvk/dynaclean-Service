@@ -24,10 +24,7 @@ export default async function CompleteServicePage({ params }) {
     [service?.serial_number],
   );
 
-  const [[report]] = await conn.execute(
-    "SELECT * FROM service_reports WHERE service_id = ?",
-    [serviceId],
-  );
+  const isNewReport = true;
 
   const warrantyExpiry = product?.installation_date
     ? dayjs(product.installation_date)
@@ -41,9 +38,9 @@ export default async function CompleteServicePage({ params }) {
 
   const combinedServiceData = {
     ...service,
-    ...report,
     product,
     warrantyExpiry,
+    isNewReport,
   };
 
   return (
