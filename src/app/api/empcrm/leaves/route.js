@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDbConnection } from "@/lib/db";
 import { getSessionPayload } from "@/lib/auth";
 import { getReportees } from "@/lib/reportingManager";
+import { calculateAccruedLeaves, getAccrualCycle } from "@/lib/leaveAccrual";
 
 // GET: Fetch leaves (admin sees all, users see only their own, reporting manager sees reportees only)
 export async function GET(request) {
@@ -126,7 +127,7 @@ export async function POST(request) {
 
     // Fetch user's profile to get leave policy and empId
     const [profiles] = await conn.execute(
-      `SELECT id, empId, full_name, employment_status, leave_policy FROM employee_profiles WHERE username = ?`,
+      `SELECT id, empId, full_name, employment_status, leave_policy, date_of_joining FROM employee_profiles WHERE username = ?`,
       [session.username]
     );
 
@@ -254,20 +255,35 @@ export async function POST(request) {
         );
       }
 
-      // Calculate already taken leaves of this type
+      const accrualCycle = getAccrualCycle(
+        leavePolicy.accrual_start_date || profile.date_of_joining,
+      );
+      const takenDateFilter = accrualCycle
+        ? "AND from_date >= ? AND from_date < ?"
+        : "AND YEAR(from_date) = YEAR(CURDATE())";
+      const takenDateParams = accrualCycle
+        ? [accrualCycle.cycleStart, accrualCycle.cycleEnd]
+        : [];
+
       const [takenLeaves] = await conn.execute(
         `SELECT COALESCE(SUM(total_days), 0) as taken 
          FROM employee_leaves 
          WHERE username = ? 
          AND leave_type = ? 
          AND status = 'approved'
-         AND YEAR(from_date) = YEAR(CURDATE())`,
-        [session.username, leave_type]
+         ${takenDateFilter}`,
+        [session.username, leave_type, ...takenDateParams]
       );
 
-      const takenCount = takenLeaves[0].taken || 0;
+      const takenCount = Number(takenLeaves[0].taken || 0);
       const allowedKey = `${leave_type}_allowed`;
-      const allowedCount = leavePolicy[allowedKey] || 0;
+      const allowedCount = calculateAccruedLeaves({
+        joiningDate: profile.date_of_joining,
+        accrualStartDate: leavePolicy.accrual_start_date,
+        maxAllowed: Number(leavePolicy[allowedKey] || 0),
+        employmentStatus: profile.employment_status,
+        leaveType: leave_type,
+      });
 
       // Check if requesting leave exceeds available balance
       if (takenCount + totalDays > allowedCount) {

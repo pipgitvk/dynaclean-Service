@@ -1,29 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDbConnection } from "@/lib/db";
 import { getSessionPayload } from "@/lib/auth";
-
-/**
- * Calculates accrued paid leaves from date_of_joining.
- * Rule: 1 leave per completed month from accrual start date up to today.
- * Returns the number of accrued days (capped at the policy allowed limit).
- */
-function calcAccruedLeaves(dateOfJoining, allowedPerYear) {
-  if (!dateOfJoining) return allowedPerYear;
-  const start = new Date(dateOfJoining);
-  const today = new Date();
-  if (isNaN(start.getTime()) || start > today) return 0;
-
-  // Count complete months elapsed
-  let months =
-    (today.getFullYear() - start.getFullYear()) * 12 +
-    (today.getMonth() - start.getMonth());
-  // If we haven't passed the same day-of-month yet, subtract 1
-  if (today.getDate() < start.getDate()) months -= 1;
-  if (months < 0) months = 0;
-
-  // 1 leave per completed month, capped at policy allowed
-  return Math.min(months, allowedPerYear ?? months);
-}
+import { calculateAccruedLeaves, getAccrualCycle } from "@/lib/leaveAccrual";
 
 export async function GET() {
   try {
@@ -43,16 +21,17 @@ export async function GET() {
     );
 
     let leavePolicy = {};
-    let employmentStatus = "probation";
+    let employmentStatus = null;
     let dateOfJoining = null;
 
     if (profiles.length > 0) {
-      employmentStatus = profiles[0].employment_status || "probation";
+      employmentStatus = profiles[0].employment_status || null;
       dateOfJoining = profiles[0].date_of_joining || null;
       try {
-        leavePolicy = profiles[0].leave_policy
-          ? JSON.parse(profiles[0].leave_policy)
-          : {};
+        const rawPolicy = profiles[0].leave_policy;
+        if (!rawPolicy) leavePolicy = {};
+        else if (typeof rawPolicy === "string") leavePolicy = JSON.parse(rawPolicy);
+        else leavePolicy = rawPolicy;
       } catch {
         leavePolicy = {};
       }
@@ -61,7 +40,16 @@ export async function GET() {
     // ── 2. Leave types to evaluate ─────────────────────────────────────────
     const leaveTypes = ["sick", "paid", "casual"];
 
-    // ── 3. For each type: count approved & pending this calendar year ──────
+    const accrualCycle = getAccrualCycle(
+      leavePolicy.accrual_start_date || dateOfJoining,
+    );
+    const leaveDateFilter = accrualCycle
+      ? "AND from_date >= ? AND from_date < ?"
+      : "AND YEAR(from_date) = YEAR(CURDATE())";
+    const leaveDateParams = accrualCycle
+      ? [accrualCycle.cycleStart, accrualCycle.cycleEnd]
+      : [];
+
     const [takenRows] = await conn.execute(
       `SELECT leave_type,
               SUM(CASE WHEN status = 'approved' THEN total_days ELSE 0 END) AS taken,
@@ -69,9 +57,9 @@ export async function GET() {
        FROM employee_leaves
        WHERE username = ?
          AND leave_type IN ('sick','paid','casual','unpaid')
-         AND YEAR(from_date) = YEAR(CURDATE())
+         ${leaveDateFilter}
        GROUP BY leave_type`,
-      [username]
+      [username, ...leaveDateParams]
     );
 
     const takenMap = {};
@@ -89,13 +77,13 @@ export async function GET() {
       if (!enabled) continue;
 
       const allowedRaw = Number(leavePolicy[`${type}_allowed`] || 0);
-
-      // For paid leave: accrue 1 per month from date_of_joining
-      // (sick and casual use flat annual quota)
-      const allowed =
-        type === "paid"
-          ? calcAccruedLeaves(dateOfJoining, allowedRaw)
-          : allowedRaw;
+      const allowed = calculateAccruedLeaves({
+        joiningDate: dateOfJoining,
+        accrualStartDate: leavePolicy.accrual_start_date,
+        maxAllowed: allowedRaw,
+        employmentStatus,
+        leaveType: type,
+      });
 
       const taken = takenMap[type] || 0;
       const pending = pendingMap[type] || 0;
@@ -110,31 +98,23 @@ export async function GET() {
       pending: pendingMap["unpaid"] || 0,
     };
 
-    // ── 6. Accrual info for UI display ────────────────────────────────────
-    let accrualInfo = null;
-    if (dateOfJoining && leavePolicy.paid_enabled) {
-      const start = new Date(dateOfJoining);
-      const today = new Date();
-      let months =
-        (today.getFullYear() - start.getFullYear()) * 12 +
-        (today.getMonth() - start.getMonth());
-      if (today.getDate() < start.getDate()) months -= 1;
-      if (months < 0) months = 0;
-
-      accrualInfo = {
-        start_date: start.toISOString().split("T")[0],
-        months_completed: months,
-        accrued: Math.min(months, leavePolicy.paid_allowed ?? months),
-        per_month: 1,
-      };
-    }
+    const paidSummary = leaveSummary.find((leave) => leave.type === "paid");
 
     return NextResponse.json({
       success: true,
-      employment_status: employmentStatus,
+      employment_status: employmentStatus || "probation",
+      accrual_start_date: leavePolicy.accrual_start_date || null,
+      accrual_cycle_start: accrualCycle?.cycleStart || null,
+      accrual_cycle_end: accrualCycle?.cycleEnd || null,
       leaveSummary,
       unpaidLeaves,
-      accrualInfo,
+      accrualInfo: accrualCycle
+        ? {
+            start_date: leavePolicy.accrual_start_date || accrualCycle.cycleStart,
+            accrued: paidSummary?.allowed || 0,
+            per_month: 1,
+          }
+        : null,
     });
   } catch (error) {
     console.error("[leaves/stats]", error);

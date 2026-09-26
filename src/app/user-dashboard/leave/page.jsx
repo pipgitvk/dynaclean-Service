@@ -187,6 +187,14 @@ export default function LeavePage() {
         )
       : 0;
 
+  const visibleLeaves =
+    stats?.accrual_cycle_start && stats?.accrual_cycle_end
+      ? leaves.filter((leave) => {
+          const from = String(leave.from_date || "").slice(0, 10);
+          return from >= stats.accrual_cycle_start && from < stats.accrual_cycle_end;
+        })
+      : leaves;
+
   return (
     <div className="px-3 py-4 sm:px-6 sm:py-6 max-w-7xl mx-auto">
 
@@ -214,7 +222,7 @@ export default function LeavePage() {
       ) : stats && (
         <div className="mb-6">
           {/* Employment status badge */}
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             <span
               className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
                 stats.employment_status === "permanent"
@@ -225,6 +233,11 @@ export default function LeavePage() {
               Employment Status:{" "}
               {stats.employment_status === "permanent" ? "Permanent" : "Probation"}
             </span>
+            {stats.accrual_cycle_start && (
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                Accrual from {formatDate(stats.accrual_start_date || stats.accrual_cycle_start)}
+              </span>
+            )}
           </div>
 
           {/* Leave balance cards — 1 col mobile, 2 col sm, 3 col md+ */}
@@ -309,7 +322,9 @@ export default function LeavePage() {
               <div className="space-y-2">
                 <p className="text-sm text-gray-500">No limit — always available</p>
                 <div className="flex justify-between items-center pt-1">
-                  <span className="text-sm text-gray-500">Taken this year</span>
+                  <span className="text-sm text-gray-500">
+                    {stats.accrual_cycle_start ? "Taken this cycle" : "Taken this year"}
+                  </span>
                   <span className="text-base font-bold text-gray-900">
                     {stats.unpaidLeaves.taken} days
                   </span>
@@ -332,9 +347,16 @@ export default function LeavePage() {
 
       {/* ── Leave History ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Leave History</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+          Leave History
+          {stats?.accrual_cycle_start && (
+            <span className="ml-2 text-sm font-normal text-gray-500">
+              from accrual date {formatDate(stats.accrual_start_date || stats.accrual_cycle_start)}
+            </span>
+          )}
+        </h2>
 
-        {leaves.length === 0 ? (
+        {visibleLeaves.length === 0 ? (
           <p className="text-gray-400 text-sm text-center py-6">No leave applications found</p>
         ) : (
           <>
@@ -354,7 +376,7 @@ export default function LeavePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {leaves.map((leave) => (
+                  {visibleLeaves.map((leave) => (
                     <tr key={leave.id} className="hover:bg-gray-50">
                       <td className="px-3 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLeaveTypeColor(leave.leave_type)}`}>
@@ -385,7 +407,7 @@ export default function LeavePage() {
 
             {/* Mobile cards — visible only on mobile */}
             <div className="sm:hidden space-y-3">
-              {leaves.map((leave) => (
+              {visibleLeaves.map((leave) => (
                 <div
                   key={leave.id}
                   className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2"
