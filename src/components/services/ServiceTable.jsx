@@ -4,11 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Modal from "./Modal";
+import ServiceReportPrintButton from "./ServiceReportPrintButton";
 
 export default function ServiceTable({ serviceRecords, role }) {
   const searchParams = useSearchParams();
   const initialStatus = searchParams.get("status") || "";
 
+  const [records, setRecords] = useState(serviceRecords);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -19,6 +21,43 @@ export default function ServiceTable({ serviceRecords, role }) {
   const [dateTo, setDateTo] = useState("");
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const dashboardPath = "user-dashboard";
+
+  useEffect(() => {
+    setRecords(serviceRecords);
+  }, [serviceRecords]);
+
+  const getReportDateById = (record, reportId) => {
+    const ids = parseReportIds(record.report_ids);
+    const dates = String(record.report_dates || "")
+      .split(",")
+      .map((date) => date.trim());
+    const index = ids.indexOf(String(reportId));
+    return index >= 0 ? dates[index] || "" : "";
+  };
+
+  const handleRecordImagesUpdated = (serviceId, preCompletion, afterCompletion) => {
+    setRecords((prev) =>
+      prev.map((record) =>
+        record.service_id === serviceId
+          ? {
+              ...record,
+              pre_completion: preCompletion,
+              after_completion: afterCompletion,
+            }
+          : record
+      )
+    );
+    setSelectedService((prev) =>
+      prev?.service_id === serviceId
+        ? {
+            ...prev,
+            pre_completion: preCompletion,
+            after_completion: afterCompletion,
+          }
+        : prev
+    );
+  };
 
   // Helper: format dates safely
   const formatDate = (value) => {
@@ -29,7 +68,7 @@ export default function ServiceTable({ serviceRecords, role }) {
   };
 
   // Sort logic
-  const sortedRecords = [...serviceRecords].sort((a, b) => {
+  const sortedRecords = [...records].sort((a, b) => {
     if (sortConfig.key !== null) {
       const aValue = a[sortConfig.key] || "";
       const bValue = b[sortConfig.key] || "";
@@ -121,14 +160,19 @@ export default function ServiceTable({ serviceRecords, role }) {
       <div className="flex flex-wrap gap-x-2 gap-y-1">
         {ids.map((id, index) => (
           <span key={id}>
-            <a
-              href={`/user-dashboard/view-service-report/${record.service_id}?reportId=${id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline font-medium"
-            >
-              {id}
-            </a>
+            <ServiceReportPrintButton
+              serviceId={record.service_id}
+              reportId={id}
+              reportDate={getReportDateById(record, id)}
+              dashboardPath={dashboardPath}
+              preCompletion={record.pre_completion}
+              afterCompletion={record.after_completion}
+              onRecordImagesUpdated={(pre, after) =>
+                handleRecordImagesUpdated(record.service_id, pre, after)
+              }
+              label={id}
+              variant="link"
+            />
             {index < ids.length - 1 ? "," : ""}
           </span>
         ))}
@@ -362,7 +406,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                             href={`/user-dashboard/complete-service/${record.service_id}`}
                             className="inline-block px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
                           >
-                            + Make Report
+                            +Report
                           </Link>
                           {(record.status?.toUpperCase() ===
                             "PENDING FOR SPARES" 
