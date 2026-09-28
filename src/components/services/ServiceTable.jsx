@@ -23,6 +23,11 @@ export default function ServiceTable({ serviceRecords, role }) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const dashboardPath = "user-dashboard";
 
+  const reportHref = (record) =>
+    String(record.service_type || "").trim().toUpperCase() === "COMPLAINT"
+      ? `/user-dashboard/service-report-steps/${record.service_id}`
+      : `/user-dashboard/complete-service/${record.service_id}`;
+
   useEffect(() => {
     setRecords(serviceRecords);
   }, [serviceRecords]);
@@ -247,7 +252,7 @@ export default function ServiceTable({ serviceRecords, role }) {
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4 px-4">
-          {["COMPLETED", "PENDING FOR SPARES", "PENDING"].map((status) => (
+          {["COMPLETED", "PENDING FOR SPARES", "PENDING", "WORKED"].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -258,6 +263,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                   ? "bg-green-500 hover:bg-green-600"
                   : status === "PENDING FOR SPARES"
                   ? "bg-orange-500 hover:bg-orange-600"
+                  : status === "WORKED"
+                  ? "bg-amber-500 hover:bg-amber-600"
                   : "bg-red-500 hover:bg-red-600"
               }`}
             >
@@ -356,6 +363,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                     record.status?.toUpperCase() === "PENDING FOR SPARES"
                   )
                     rowBackgroundColor = "bg-orange-100";
+                  else if (record.status?.toUpperCase() === "WORKED")
+                    rowBackgroundColor = "bg-amber-50";
 
                   return (
                     <tr
@@ -403,7 +412,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                               </Link>
                             )}
                           <Link
-                            href={`/user-dashboard/complete-service/${record.service_id}`}
+                            href={reportHref(record)}
                             className="inline-block px-3 py-1 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
                           >
                             +Report
@@ -462,6 +471,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                 cardBackgroundColor = "bg-green-50";
               else if (record.status?.toUpperCase() === "PENDING FOR SPARES")
                 cardBackgroundColor = "bg-orange-100";
+              else if (record.status?.toUpperCase() === "WORKED")
+                cardBackgroundColor = "bg-amber-50";
 
               return (
                 <div
@@ -555,7 +566,7 @@ export default function ServiceTable({ serviceRecords, role }) {
                         </Link>
                       )}
                     <Link
-                      href={`/user-dashboard/complete-service/${record.service_id}`}
+                      href={reportHref(record)}
                       className="px-3 py-2 text-sm bg-purple-500 text-white rounded-md hover:bg-purple-600 text-center"
                     >
                       + Make Report
