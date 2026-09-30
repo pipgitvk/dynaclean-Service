@@ -5,12 +5,16 @@ import {
   isServiceVideoCloudinaryEnabled,
   uploadServiceReportVideo,
 } from "@/lib/uploadServiceReportVideo";
+import {
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_DURATION_SEC,
+  videoDurationErrorMessage,
+} from "@/lib/serviceReportVideoLimits";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const VIDEO_STEPS = ["video_360", "video_problem", "video_damaged", "video_completion"];
-const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
 const EXT_BY_MIME = {
   "video/mp4": ".mp4",
@@ -148,6 +152,13 @@ export async function POST(request, context) {
       }
       if (file.size > MAX_VIDEO_BYTES) {
         return NextResponse.json({ message: "Video is too large. Maximum size is 200 MB." }, { status: 400 });
+      }
+      const duration = Number(formData.get("duration"));
+      if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_VIDEO_DURATION_SEC) {
+        const message = Number.isFinite(duration) && duration > MAX_VIDEO_DURATION_SEC
+          ? videoDurationErrorMessage(duration)
+          : `Video must be ${MAX_VIDEO_DURATION_SEC} seconds or shorter.`;
+        return NextResponse.json({ message }, { status: 400 });
       }
       const ext = videoExtension(file);
       if (!ext) {

@@ -4,25 +4,31 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Check, ChevronLeft, Video } from "lucide-react";
+import {
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_DURATION_SEC,
+  videoDurationErrorMessage,
+} from "@/lib/serviceReportVideoLimits";
+import { getVideoDurationSeconds } from "@/utils/videoDuration";
 
 const STEP_DEFS = [
   {
     key: "video_360",
     title: "360° video of machine with serial number",
     kind: "video",
-    help: "Record a full 360° walk-around of the machine. The serial number must be clearly visible in the video.",
+    help: `Record a full 360° walk-around of the machine. The serial number must be clearly visible. Maximum video length: ${MAX_VIDEO_DURATION_SEC} seconds.`,
   },
   {
     key: "video_problem",
     title: "Problem showing video",
     kind: "video",
-    help: "Record a video that shows the problem on the machine.",
+    help: `Record a video that shows the problem on the machine. Maximum video length: ${MAX_VIDEO_DURATION_SEC} seconds.`,
   },
   {
     key: "video_damaged",
     title: "Damaged parts video",
     kind: "video",
-    help: "Record a video of the damaged parts.",
+    help: `Record a video of the damaged parts. Maximum video length: ${MAX_VIDEO_DURATION_SEC} seconds.`,
   },
   {
     key: "work_start",
@@ -40,7 +46,7 @@ const STEP_DEFS = [
     key: "video_completion",
     title: "Completion video",
     kind: "video",
-    help: "Record a video of the machine after the work is finished. The add report form opens after this step.",
+    help: `Record a video of the machine after the work is finished. Maximum video length: ${MAX_VIDEO_DURATION_SEC} seconds. The add report form opens after this step.`,
   },
 ];
 
@@ -91,6 +97,7 @@ export default function ServiceReportStepsPage() {
   const [busyKey, setBusyKey] = useState("");
   const [progress, setProgress] = useState(0);
   const [picked, setPicked] = useState(null);
+  const [checkingVideo, setCheckingVideo] = useState(false);
 
   const reportHref = `/user-dashboard/complete-service/${serviceId}`;
 
@@ -121,14 +128,29 @@ export default function ServiceReportStepsPage() {
   const openIndex = useMemo(() => firstOpenIndex(data?.steps), [data]);
   const allDone = openIndex >= STEP_DEFS.length;
 
-  const saveAction = async (action, file) => {
+  const saveAction = async (action, file, durationSec) => {
     setError("");
     setBusyKey(action);
     setProgress(file ? 1 : 0);
     try {
+      let duration = durationSec;
+      if (file) {
+        if (duration == null) {
+          duration = await getVideoDurationSeconds(file);
+        }
+        if (!Number.isFinite(duration) || duration <= 0) {
+          throw new Error("Could not read video length.");
+        }
+        if (duration > MAX_VIDEO_DURATION_SEC) {
+          throw new Error(videoDurationErrorMessage(duration));
+        }
+      }
       const formData = new FormData();
       formData.append("action", action);
-      if (file) formData.append("file", file);
+      if (file) {
+        formData.append("file", file);
+        formData.append("duration", String(duration));
+      }
       const body = await uploadWithProgress(
         `/api/service-report-steps/${serviceId}`,
         formData,
@@ -149,21 +171,37 @@ export default function ServiceReportStepsPage() {
     }
   };
 
-  const onPickFile = (event) => {
+  const onPickFile = async (event) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("video/") && !/\.(mp4|mov|webm|3gp|mkv|m4v|avi)$/i.test(file.name)) {
       setError("Choose a video file.");
-      event.target.value = "";
       return;
     }
-    if (file.size > 200 * 1024 * 1024) {
+    if (file.size > MAX_VIDEO_BYTES) {
       setError("Video is too large. Maximum size is 200 MB.");
-      event.target.value = "";
       return;
     }
+
+    setCheckingVideo(true);
     setError("");
-    setPicked({ file, preview: URL.createObjectURL(file) });
+    try {
+      const duration = await getVideoDurationSeconds(file);
+      if (!Number.isFinite(duration) || duration <= 0) {
+        setError("Could not read video length.");
+        return;
+      }
+      if (duration > MAX_VIDEO_DURATION_SEC) {
+        setError(videoDurationErrorMessage(duration));
+        return;
+      }
+      setPicked({ file, preview: URL.createObjectURL(file), duration });
+    } catch {
+      setError("Could not read video length.");
+    } finally {
+      setCheckingVideo(false);
+    }
   };
 
   return (
@@ -179,7 +217,8 @@ export default function ServiceReportStepsPage() {
       <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
         <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">Service report steps</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Complete these 6 steps on site. The add report form opens after the completion video.
+          Complete these 6 steps on site. Each video must be {MAX_VIDEO_DURATION_SEC} seconds or shorter.
+          The add report form opens after the completion video.
         </p>
         {data?.service && (
           <div className="mt-4 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
@@ -278,11 +317,14 @@ export default function ServiceReportStepsPage() {
                             />
                           </label>
                         </div>
+                        {checkingVideo && (
+                          <p className="text-sm text-gray-500">Checking video length…</p>
+                        )}
                         {picked && (
                           <button
                             type="button"
-                            disabled={Boolean(busyKey)}
-                            onClick={() => saveAction(step.key, picked.file)}
+                            disabled={Boolean(busyKey) || checkingVideo}
+                            onClick={() => saveAction(step.key, picked.file, picked.duration)}
                             className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-60"
                           >
                             {busyKey === step.key ? `Uploading ${progress}%` : "Save video"}
