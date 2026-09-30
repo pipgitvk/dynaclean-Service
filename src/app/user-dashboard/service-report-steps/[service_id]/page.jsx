@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Check, ChevronLeft, Video } from "lucide-react";
+import { Check, ChevronLeft, Video, X } from "lucide-react";
 import {
   MAX_VIDEO_BYTES,
   MAX_VIDEO_DURATION_SEC,
@@ -11,7 +11,13 @@ import {
 } from "@/lib/serviceReportVideoLimits";
 import { getVideoDurationSeconds } from "@/utils/videoDuration";
 import {
+  cancelActiveVideoCompression,
+  compressServiceReportVideo,
+  isVideoUploadCancelled as isCompressCancelled,
+} from "@/utils/compressServiceReportVideo";
+import {
   fetchServiceReportVideoUploadSignature,
+  isVideoUploadCancelled as isUploadCancelled,
   saveServiceReportVideoStep,
   uploadServiceReportVideoToCloudinary,
 } from "@/utils/uploadServiceReportVideoClient";
@@ -80,8 +86,37 @@ export default function ServiceReportStepsPage() {
   const [picked, setPicked] = useState(null);
   const [checkingVideo, setCheckingVideo] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
+  const [uploadSignature, setUploadSignature] = useState(null);
+  const cancelRef = useRef(false);
+  const uploadXhrRef = useRef(null);
 
   const reportHref = `/user-dashboard/complete-service/${serviceId}`;
+
+  const clearPickedVideo = useCallback((previewUrl) => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPicked(null);
+    setUploadSignature(null);
+  }, []);
+
+  const removePickedVideo = useCallback(() => {
+    clearPickedVideo(picked?.preview);
+    setError("");
+  }, [clearPickedVideo, picked?.preview]);
+
+  const cancelVideoAction = useCallback(async () => {
+    cancelRef.current = true;
+    if (uploadXhrRef.current) {
+      uploadXhrRef.current.abort();
+      uploadXhrRef.current = null;
+    }
+    await cancelActiveVideoCompression();
+    clearPickedVideo(picked?.preview);
+    setBusyKey("");
+    setProgress(0);
+    setUploadPhase("");
+    setError("");
+    cancelRef.current = false;
+  }, [clearPickedVideo, picked?.preview]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -112,9 +147,10 @@ export default function ServiceReportStepsPage() {
 
   const saveAction = async (action, file, durationSec) => {
     setError("");
+    cancelRef.current = false;
     setBusyKey(action);
     setProgress(file ? 1 : 0);
-    setUploadPhase(file ? "uploading" : "");
+    setUploadPhase(file ? "compressing" : "");
     try {
       let body;
       if (file) {
@@ -129,8 +165,31 @@ export default function ServiceReportStepsPage() {
           throw new Error(videoDurationErrorMessage(duration));
         }
 
-        const signParams = await fetchServiceReportVideoUploadSignature(serviceId, action);
-        const uploaded = await uploadServiceReportVideoToCloudinary(file, signParams, setProgress);
+        const compressedFile = await compressServiceReportVideo(
+          file,
+          setProgress,
+          () => cancelRef.current,
+        );
+        if (cancelRef.current) return;
+
+        setUploadPhase("uploading");
+        setProgress(0);
+
+        let signParams = uploadSignature?.step === action ? uploadSignature.params : null;
+        if (!signParams) {
+          signParams = await fetchServiceReportVideoUploadSignature(serviceId, action);
+        }
+        setUploadSignature(null);
+        if (cancelRef.current) return;
+
+        const uploaded = await uploadServiceReportVideoToCloudinary(
+          compressedFile,
+          signParams,
+          setProgress,
+          uploadXhrRef,
+        );
+        if (cancelRef.current) return;
+
         setUploadPhase("saving");
         body = await saveServiceReportVideoStep(
           serviceId,
@@ -152,22 +211,28 @@ export default function ServiceReportStepsPage() {
       }
 
       setData(body);
-      setPicked(null);
+      clearPickedVideo(picked?.preview);
       const next = firstOpenIndex(body.steps);
       setActiveIndex(next);
       if (action === "video_completion") {
         router.push(reportHref);
       }
     } catch (err) {
+      if (isCompressCancelled(err) || isUploadCancelled(err) || cancelRef.current) {
+        return;
+      }
       setError(err.message || "Could not save this step.");
     } finally {
-      setBusyKey("");
-      setProgress(0);
-      setUploadPhase("");
+      if (!cancelRef.current) {
+        setBusyKey("");
+        setProgress(0);
+        setUploadPhase("");
+      }
+      uploadXhrRef.current = null;
     }
   };
 
-  const onPickFile = async (event) => {
+  const onPickFile = async (event, stepKey) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -193,6 +258,13 @@ export default function ServiceReportStepsPage() {
         return;
       }
       setPicked({ file, preview: URL.createObjectURL(file), duration });
+      setUploadSignature(null);
+
+      if (stepKey) {
+        fetchServiceReportVideoUploadSignature(serviceId, stepKey)
+          .then((params) => setUploadSignature({ step: stepKey, params }))
+          .catch(() => setUploadSignature(null));
+      }
     } catch {
       setError("Could not read video length.");
     } finally {
@@ -214,6 +286,7 @@ export default function ServiceReportStepsPage() {
         <h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">Service report steps</h1>
         <p className="mt-1 text-sm text-gray-500">
           Complete these 6 steps on site. Each video must be {MAX_VIDEO_DURATION_SEC} seconds or shorter.
+          Videos are compressed to about 2–3 MB before upload for faster mobile data transfer.
           The add report form opens after the completion video.
         </p>
         {data?.service && (
@@ -258,7 +331,7 @@ export default function ServiceReportStepsPage() {
                   type="button"
                   disabled={locked}
                   onClick={() => {
-                    setPicked(null);
+                    clearPickedVideo(picked?.preview);
                     setActiveIndex(index);
                   }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left disabled:cursor-not-allowed"
@@ -283,15 +356,32 @@ export default function ServiceReportStepsPage() {
                     {step.kind === "video" && (
                       <div className="space-y-3">
                         {(picked?.preview || data.steps[step.key]) && (
-                          <video
-                            key={picked?.preview || data.steps[step.key]}
-                            src={picked?.preview || data.steps[step.key]}
-                            controls
-                            className="max-h-72 w-full rounded-lg bg-black"
-                          />
+                          <div className="relative">
+                            <video
+                              key={picked?.preview || data.steps[step.key]}
+                              src={picked?.preview || data.steps[step.key]}
+                              controls
+                              className="max-h-72 w-full rounded-lg bg-black"
+                            />
+                            {picked?.preview && (
+                              <button
+                                type="button"
+                                onClick={
+                                  busyKey === step.key ? cancelVideoAction : removePickedVideo
+                                }
+                                className="absolute right-2 top-2 rounded-full bg-black/70 p-1.5 text-white shadow hover:bg-black"
+                                aria-label="Remove video"
+                                title="Remove video"
+                              >
+                                <X className="h-5 w-5" />
+                              </button>
+                            )}
+                          </div>
                         )}
                         <div className="grid grid-cols-2 gap-2">
-                          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-5 text-sm text-blue-800 hover:bg-blue-100">
+                          <label className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-5 text-sm text-blue-800 ${
+                            busyKey === step.key ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-blue-100"
+                          }`}>
                             <Video className="h-5 w-5" />
                             Record video
                             <input
@@ -299,20 +389,33 @@ export default function ServiceReportStepsPage() {
                               accept="video/*"
                               capture="environment"
                               className="hidden"
-                              onChange={onPickFile}
+                              disabled={busyKey === step.key}
+                              onChange={(event) => onPickFile(event, step.key)}
                             />
                           </label>
-                          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-5 text-sm text-blue-800 hover:bg-blue-100">
+                          <label className={`flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-3 py-5 text-sm text-blue-800 ${
+                            busyKey === step.key ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-blue-100"
+                          }`}>
                             <Video className="h-5 w-5" />
                             Choose video
                             <input
                               type="file"
                               accept="video/*"
                               className="hidden"
-                              onChange={onPickFile}
+                              disabled={busyKey === step.key}
+                              onChange={(event) => onPickFile(event, step.key)}
                             />
                           </label>
                         </div>
+                        {picked?.preview && busyKey === step.key && (
+                          <button
+                            type="button"
+                            onClick={cancelVideoAction}
+                            className="w-full rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                          >
+                            Cancel upload
+                          </button>
+                        )}
                         {checkingVideo && (
                           <p className="text-sm text-gray-500">Checking video length…</p>
                         )}
@@ -323,12 +426,19 @@ export default function ServiceReportStepsPage() {
                             onClick={() => saveAction(step.key, picked.file, picked.duration)}
                             className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-60"
                           >
-                            {busyKey === step.key && uploadPhase === "saving"
-                              ? "Saving…"
-                              : busyKey === step.key
-                                ? `Uploading ${progress}%`
-                                : "Save video"}
+                            {busyKey === step.key && uploadPhase === "compressing"
+                              ? `Compressing ${progress}%`
+                              : busyKey === step.key && uploadPhase === "saving"
+                                ? "Saving…"
+                                : busyKey === step.key
+                                  ? `Uploading ${progress}%`
+                                  : "Save video"}
                           </button>
+                        )}
+                        {busyKey === step.key && uploadPhase === "compressing" && (
+                          <p className="text-xs text-gray-500">
+                            Compressing video for faster upload… Please keep this page open.
+                          </p>
                         )}
                         {busyKey === step.key && uploadPhase === "uploading" && progress > 0 && progress < 100 && (
                           <p className="text-xs text-gray-500">
@@ -348,7 +458,7 @@ export default function ServiceReportStepsPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              setPicked(null);
+                              clearPickedVideo(picked?.preview);
                               setActiveIndex(index + 1);
                             }}
                             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"

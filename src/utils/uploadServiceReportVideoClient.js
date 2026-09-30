@@ -12,9 +12,16 @@ function parseJsonResponse(xhr) {
  * Upload a video directly to Cloudinary (browser → Cloudinary).
  * Avoids sending the full file through the Next.js server.
  */
-export function uploadServiceReportVideoToCloudinary(file, signParams, onProgress) {
+const CANCELLED_ERROR = "VIDEO_UPLOAD_CANCELLED";
+
+export function isVideoUploadCancelled(error) {
+  return error?.code === CANCELLED_ERROR || error?.message === CANCELLED_ERROR;
+}
+
+export function uploadServiceReportVideoToCloudinary(file, signParams, onProgress, xhrRef) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    if (xhrRef) xhrRef.current = xhr;
     const url = `https://api.cloudinary.com/v1_1/${signParams.cloudName}/video/upload`;
 
     xhr.open("POST", url);
@@ -36,6 +43,11 @@ export function uploadServiceReportVideoToCloudinary(file, signParams, onProgres
     };
 
     xhr.onerror = () => reject(new Error("Network error while uploading video."));
+    xhr.onabort = () => {
+      const error = new Error(CANCELLED_ERROR);
+      error.code = CANCELLED_ERROR;
+      reject(error);
+    };
     xhr.ontimeout = () =>
       reject(new Error("Video upload timed out. Check your connection and try again."));
 

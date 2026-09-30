@@ -45,7 +45,8 @@ export default async function UserDashboardPage() {
   SELECT
     SUM(status = 'COMPLETED') AS completed_count,
     SUM(status = 'PENDING FOR SPARES') AS pending_spares_count,
-    SUM(status = 'PENDING') AS pending_count
+    SUM(status = 'PENDING') AS pending_count,
+    SUM(status = 'WORKED') AS worked_count
   FROM service_records
   WHERE assigned_to = ?
   `,
@@ -55,6 +56,7 @@ export default async function UserDashboardPage() {
     const completedCount = Number(nrows[0]?.completed_count ?? 0);
     const pendingSparesCount = Number(nrows[0]?.pending_spares_count ?? 0);
     const pendingCount = Number(nrows[0]?.pending_count ?? 0);
+    const workedCount = Number(nrows[0]?.worked_count ?? 0);
 
     const user = rows[0];
 
@@ -84,7 +86,7 @@ export default async function UserDashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <InfoBox
             title="Completed"
             number={completedCount}
@@ -102,6 +104,12 @@ export default async function UserDashboardPage() {
             number={pendingSparesCount}
             url="/user-dashboard/view_service_reports?status=PENDING FOR SPARES"
             bgColor="#e08719"
+          />
+          <InfoBox
+            title="Worked"
+            number={workedCount}
+            url="/user-dashboard/view_service_reports?status=WORKED"
+            bgColor="#f59e0b"
           />
         </div>
 
