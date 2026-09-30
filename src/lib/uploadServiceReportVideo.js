@@ -16,6 +16,38 @@ export function isServiceVideoCloudinaryEnabled() {
   );
 }
 
+export function createServiceReportVideoUploadSignature(serviceId, step) {
+  if (!isServiceVideoCloudinaryEnabled()) {
+    throw new Error("Cloudinary is not configured.");
+  }
+  ensureCloudinaryConfig();
+
+  const timestamp = Math.round(Date.now() / 1000);
+  const folder = `service_report_videos/${serviceId}`;
+  const public_id = `${step}-${timestamp}`;
+  const paramsToSign = { timestamp, folder, public_id };
+  const signature = cloudinary.utils.api_sign_request(
+    paramsToSign,
+    process.env.CLOUDINARY_API_SECRET,
+  );
+
+  return {
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    timestamp,
+    signature,
+    folder,
+    public_id,
+  };
+}
+
+export function isCloudinaryVideoUrl(url) {
+  return (
+    typeof url === "string" &&
+    /^https:\/\/res\.cloudinary\.com\/[^/]+\/video\/upload\//i.test(url.trim())
+  );
+}
+
 export async function uploadServiceReportVideo(buffer, serviceId, step) {
   if (!isServiceVideoCloudinaryEnabled()) {
     throw new Error("Cloudinary is not configured.");

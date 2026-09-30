@@ -10,6 +10,11 @@ import {
   videoDurationErrorMessage,
 } from "@/lib/serviceReportVideoLimits";
 import { getVideoDurationSeconds } from "@/utils/videoDuration";
+import {
+  fetchServiceReportVideoUploadSignature,
+  saveServiceReportVideoStep,
+  uploadServiceReportVideoToCloudinary,
+} from "@/utils/uploadServiceReportVideoClient";
 
 const STEP_DEFS = [
   {
@@ -62,30 +67,6 @@ function firstOpenIndex(steps) {
   return index === -1 ? STEP_DEFS.length : index;
 }
 
-function uploadWithProgress(url, formData, onProgress) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-    xhr.onload = () => {
-      let data = {};
-      try {
-        data = JSON.parse(xhr.responseText || "{}");
-      } catch {
-        data = {};
-      }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-      else reject(new Error(data.message || "Could not save this step."));
-    };
-    xhr.onerror = () => reject(new Error("Could not save this step."));
-    xhr.send(formData);
-  });
-}
-
 export default function ServiceReportStepsPage() {
   const params = useParams();
   const router = useRouter();
@@ -98,6 +79,7 @@ export default function ServiceReportStepsPage() {
   const [progress, setProgress] = useState(0);
   const [picked, setPicked] = useState(null);
   const [checkingVideo, setCheckingVideo] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState("");
 
   const reportHref = `/user-dashboard/complete-service/${serviceId}`;
 
@@ -132,9 +114,11 @@ export default function ServiceReportStepsPage() {
     setError("");
     setBusyKey(action);
     setProgress(file ? 1 : 0);
+    setUploadPhase(file ? "uploading" : "");
     try {
-      let duration = durationSec;
+      let body;
       if (file) {
+        let duration = durationSec;
         if (duration == null) {
           duration = await getVideoDurationSeconds(file);
         }
@@ -144,18 +128,29 @@ export default function ServiceReportStepsPage() {
         if (duration > MAX_VIDEO_DURATION_SEC) {
           throw new Error(videoDurationErrorMessage(duration));
         }
+
+        const signParams = await fetchServiceReportVideoUploadSignature(serviceId, action);
+        const uploaded = await uploadServiceReportVideoToCloudinary(file, signParams, setProgress);
+        setUploadPhase("saving");
+        body = await saveServiceReportVideoStep(
+          serviceId,
+          action,
+          uploaded.secure_url,
+          duration,
+        );
+      } else {
+        const formData = new FormData();
+        formData.append("action", action);
+        const res = await fetch(`/api/service-report-steps/${serviceId}`, {
+          method: "POST",
+          body: formData,
+        });
+        body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body.message || "Could not save this step.");
+        }
       }
-      const formData = new FormData();
-      formData.append("action", action);
-      if (file) {
-        formData.append("file", file);
-        formData.append("duration", String(duration));
-      }
-      const body = await uploadWithProgress(
-        `/api/service-report-steps/${serviceId}`,
-        formData,
-        setProgress,
-      );
+
       setData(body);
       setPicked(null);
       const next = firstOpenIndex(body.steps);
@@ -168,6 +163,7 @@ export default function ServiceReportStepsPage() {
     } finally {
       setBusyKey("");
       setProgress(0);
+      setUploadPhase("");
     }
   };
 
@@ -327,8 +323,17 @@ export default function ServiceReportStepsPage() {
                             onClick={() => saveAction(step.key, picked.file, picked.duration)}
                             className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-60"
                           >
-                            {busyKey === step.key ? `Uploading ${progress}%` : "Save video"}
+                            {busyKey === step.key && uploadPhase === "saving"
+                              ? "Saving…"
+                              : busyKey === step.key
+                                ? `Uploading ${progress}%`
+                                : "Save video"}
                           </button>
+                        )}
+                        {busyKey === step.key && uploadPhase === "uploading" && progress > 0 && progress < 100 && (
+                          <p className="text-xs text-gray-500">
+                            Uploading to cloud… Please keep this page open.
+                          </p>
                         )}
                         {done && step.key === "video_completion" && (
                           <button

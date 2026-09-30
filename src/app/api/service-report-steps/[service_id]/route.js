@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionPayload } from "@/lib/auth";
 import { ensureServiceReportStepsTable } from "@/lib/ensureServiceReportStepsTable";
 import {
+  createServiceReportVideoUploadSignature,
+  isCloudinaryVideoUrl,
   isServiceVideoCloudinaryEnabled,
   uploadServiceReportVideo,
 } from "@/lib/uploadServiceReportVideo";
@@ -145,14 +147,22 @@ export async function POST(request, context) {
       return NextResponse.json({ message: blocked }, { status: 400 });
     }
 
+    if (action === "sign_upload") {
+      const step = String(formData.get("step") || "");
+      if (!VIDEO_STEPS.includes(step)) {
+        return NextResponse.json({ message: "Unknown video step." }, { status: 400 });
+      }
+      const blocked = missingBefore(current, step);
+      if (blocked) {
+        return NextResponse.json({ message: blocked }, { status: 400 });
+      }
+      if (!isServiceVideoCloudinaryEnabled()) {
+        return NextResponse.json({ message: "Cloudinary is not configured." }, { status: 500 });
+      }
+      return NextResponse.json(createServiceReportVideoUploadSignature(serviceId, step));
+    }
+
     if (VIDEO_STEPS.includes(action)) {
-      const file = formData.get("file");
-      if (!file || typeof file === "string" || file.size <= 0) {
-        return NextResponse.json({ message: "Choose a video to upload." }, { status: 400 });
-      }
-      if (file.size > MAX_VIDEO_BYTES) {
-        return NextResponse.json({ message: "Video is too large. Maximum size is 200 MB." }, { status: 400 });
-      }
       const duration = Number(formData.get("duration"));
       if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_VIDEO_DURATION_SEC) {
         const message = Number.isFinite(duration) && duration > MAX_VIDEO_DURATION_SEC
@@ -160,19 +170,36 @@ export async function POST(request, context) {
           : `Video must be ${MAX_VIDEO_DURATION_SEC} seconds or shorter.`;
         return NextResponse.json({ message }, { status: 400 });
       }
-      const ext = videoExtension(file);
-      if (!ext) {
-        return NextResponse.json({ message: "Upload a video file (mp4, mov, webm, or 3gp)." }, { status: 400 });
-      }
       if (!isServiceVideoCloudinaryEnabled()) {
         return NextResponse.json({ message: "Cloudinary is not configured." }, { status: 500 });
       }
 
-      const videoUrl = await uploadServiceReportVideo(
-        Buffer.from(await file.arrayBuffer()),
-        serviceId,
-        action,
-      );
+      const directUrl = String(formData.get("video_url") || "").trim();
+      let videoUrl = null;
+
+      if (directUrl) {
+        if (!isCloudinaryVideoUrl(directUrl)) {
+          return NextResponse.json({ message: "Invalid video URL." }, { status: 400 });
+        }
+        videoUrl = directUrl;
+      } else {
+        const file = formData.get("file");
+        if (!file || typeof file === "string" || file.size <= 0) {
+          return NextResponse.json({ message: "Choose a video to upload." }, { status: 400 });
+        }
+        if (file.size > MAX_VIDEO_BYTES) {
+          return NextResponse.json({ message: "Video is too large. Maximum size is 200 MB." }, { status: 400 });
+        }
+        const ext = videoExtension(file);
+        if (!ext) {
+          return NextResponse.json({ message: "Upload a video file (mp4, mov, webm, or 3gp)." }, { status: 400 });
+        }
+        videoUrl = await uploadServiceReportVideo(
+          Buffer.from(await file.arrayBuffer()),
+          serviceId,
+          action,
+        );
+      }
 
       await conn.execute(
         `INSERT INTO service_report_steps (service_id, ${action})
