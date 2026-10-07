@@ -23,10 +23,16 @@ export default function ServiceTable({ serviceRecords, role }) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const dashboardPath = "user-dashboard";
 
-  const reportHref = (record) =>
-    String(record.service_type || "").trim().toUpperCase() === "COMPLAINT"
-      ? `/user-dashboard/service-report-steps/${record.service_id}`
-      : `/user-dashboard/complete-service/${record.service_id}`;
+  const reportHref = (record) => {
+    const type = String(record.service_type || "").trim().toUpperCase();
+    if (type === "COMPLAINT") {
+      return `/user-dashboard/service-report-steps/${record.service_id}`;
+    }
+    if (type === "INSTALLATION") {
+      return `/user-dashboard/installation-completion-video/${record.service_id}`;
+    }
+    return `/user-dashboard/complete-service/${record.service_id}`;
+  };
 
   useEffect(() => {
     setRecords(serviceRecords);
