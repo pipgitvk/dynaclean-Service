@@ -1,5 +1,7 @@
 // src/app/api/update-report/route.js
 import { getDbConnection } from "@/lib/db";
+import { ensureServiceRecordsCompletedAtColumn } from "@/lib/ensureServiceRecordsCompletedAt";
+import { getISTDateTimeString } from "@/lib/istDateTime";
 import { NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -43,6 +45,7 @@ export async function POST(req) {
     const publicPath = `/Final/${status === "COMPLETED" ? "record" : "reports"}/${fileName}`;
 
     const conn = await getDbConnection();
+    await ensureServiceRecordsCompletedAtColumn(conn);
 
     // Start building the SQL query
     let sql = `
@@ -53,7 +56,8 @@ export async function POST(req) {
 
     // Conditionally add the completed_date to the query and parameters
     if (status === "COMPLETED") {
-      sql += `, completed_date = CURDATE()`;
+      sql += `, completed_date = CURDATE(), completed_at = ?`;
+      params.push(getISTDateTimeString());
     }
 
     // Add the WHERE clause and the final parameter

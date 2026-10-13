@@ -6,6 +6,8 @@ import UpcomingTasks from "@/components/task/UpcomingTasks";
 import AttendanceTracker from "@/components/AttendanceTracker";
 import ProfilePicUploader from "./ProfilePicUploader";
 import InfoBox from "@/components/InfoBox";
+import { ensureServiceRecordsCompletedAtColumn } from "@/lib/ensureServiceRecordsCompletedAt";
+import { shouldShowServiceRecord } from "@/lib/serviceRecordVisibility";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret";
 
@@ -29,6 +31,7 @@ export default async function UserDashboardPage() {
     const username = payload.username;
 
     const connection = await getDbConnection();
+    await ensureServiceRecordsCompletedAtColumn(connection);
 
     // The SQL query correctly finds the user based on the username from the token
     const [rows] = await connection.execute(
@@ -40,10 +43,20 @@ export default async function UserDashboardPage() {
       [username, username]
     );
 
+    const [statusRows] = await connection.execute(
+      `SELECT status, completed_at FROM service_records WHERE assigned_to = ?`,
+      [username],
+    );
+
+    const completedCount = statusRows.filter(
+      (row) =>
+        String(row.status || "").trim().toUpperCase() === "COMPLETED" &&
+        shouldShowServiceRecord(row),
+    ).length;
+
     const [nrows] = await connection.execute(
       `
   SELECT
-    SUM(status = 'COMPLETED') AS completed_count,
     SUM(status = 'PENDING FOR SPARES') AS pending_spares_count,
     SUM(status = 'PENDING') AS pending_count,
     SUM(status = 'WORKED') AS worked_count
@@ -53,7 +66,6 @@ export default async function UserDashboardPage() {
       [username]
     );
 
-    const completedCount = Number(nrows[0]?.completed_count ?? 0);
     const pendingSparesCount = Number(nrows[0]?.pending_spares_count ?? 0);
     const pendingCount = Number(nrows[0]?.pending_count ?? 0);
     const workedCount = Number(nrows[0]?.worked_count ?? 0);

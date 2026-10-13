@@ -5,7 +5,9 @@ import ServiceTable from "@/components/services/ServiceTable"; // Import the new
 import { cookies } from "next/headers";
 
 import { getSessionPayload } from "@/lib/auth";
+import { ensureServiceRecordsCompletedAtColumn } from "@/lib/ensureServiceRecordsCompletedAt";
 import { getISTCalendarDate } from "@/lib/istDateTime";
+import { shouldShowServiceRecord } from "@/lib/serviceRecordVisibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,6 +30,7 @@ export default async function ViewServiceReportsPage() {
 
   try {
     const conn = await getDbConnection();
+    await ensureServiceRecordsCompletedAtColumn(conn);
     const sql = `
   SELECT
     sr.*,
@@ -53,7 +56,9 @@ export default async function ViewServiceReportsPage() {
 
     const [rows] = await conn.execute(sql, [user]);
 
-    serviceRecords = rows.map((row) => ({
+    serviceRecords = rows
+      .filter((row) => shouldShowServiceRecord(row))
+      .map((row) => ({
       ...row,
       customer_name: row.customer_name_from_wp || "N/A",
       installed_address: row.installed_address_from_wp || "N/A",
@@ -71,6 +76,7 @@ export default async function ViewServiceReportsPage() {
       _filterCompletedYmd: row.completed_date
         ? getISTCalendarDate(new Date(row.completed_date))
         : null,
+      completed_at: row.completed_at ?? null,
     }));
 
     // conn.end();

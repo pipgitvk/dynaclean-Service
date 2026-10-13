@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { shouldShowServiceRecord } from "@/lib/serviceRecordVisibility";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Modal from "./Modal";
@@ -19,6 +20,7 @@ export default function ServiceTable({ serviceRecords, role }) {
   const [dateField, setDateField] = useState("complaint"); // "complaint" | "completed"
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const dashboardPath = "user-dashboard";
@@ -37,6 +39,11 @@ export default function ServiceTable({ serviceRecords, role }) {
   useEffect(() => {
     setRecords(serviceRecords);
   }, [serviceRecords]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const getReportDateById = (record, reportId) => {
     const ids = parseReportIds(record.report_ids);
@@ -101,7 +108,7 @@ export default function ServiceTable({ serviceRecords, role }) {
   // Deduplicate by service_id first
   const uniqueRecords = Array.from(
     new Map(filteredRecords.map((r) => [r.service_id, r])).values()
-  );
+  ).filter((record) => shouldShowServiceRecord(record, nowMs));
 
   // Then filter by status
   const filteredByStatus = uniqueRecords.filter((record) =>

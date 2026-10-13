@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getDbConnection } from "@/lib/db";
+import { ensureServiceRecordsCompletedAtColumn } from "@/lib/ensureServiceRecordsCompletedAt";
+import { getISTDateTimeString } from "@/lib/istDateTime";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import nodemailer from "nodemailer";
@@ -73,6 +75,7 @@ export async function POST(request, context) {
   let conn;
   try {
     conn = await getDbConnection();
+    await ensureServiceRecordsCompletedAtColumn(conn);
     console.log("✅ Connected to DB");
 
     const formData = await request.formData();
@@ -298,6 +301,7 @@ export async function POST(request, context) {
       Object.assign(updateRecordFields, {
         completion_remark: completionRemark,
         completed_date: completedDate,
+        completed_at: getISTDateTimeString(),
         checklist: reportFields.checklist,
         replaced: reportFields.replaced,
         to_be_replaced: reportFields.to_be_replaced,
