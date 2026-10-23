@@ -1,4 +1,4 @@
-import { writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
 import { getDbConnection } from '@/lib/db';
@@ -19,6 +19,7 @@ export async function POST(req) {
     const uploadDir = path.join(process.cwd(), 'public', 'attachments');
     const filePath = path.join(uploadDir, fileName);
 
+    await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, buffer);
 
     // Save filename to service_records table

@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, Video, Play, Square } from "lucide-react";
+import { ChevronLeft, Video, Play, Square, Download, Upload, FileText } from "lucide-react";
+import dayjs from "dayjs";
+import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
+import { isInstallationReportLayout } from "@/utils/reportLayout";
+import { getCompletionFileSrc } from "@/utils/signatureUrl";
 
 const RECORDING_DURATION = 45; // 45 seconds
 
@@ -46,6 +50,11 @@ export default function InstallationCompletionVideoPage() {
   const [preview, setPreview] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [reportFile, setReportFile] = useState(null);
+  const [uploadingReport, setUploadingReport] = useState(false);
+  const [uploadedReportName, setUploadedReportName] = useState("");
+  const [downloadingBlank, setDownloadingBlank] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
 
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -54,6 +63,10 @@ export default function InstallationCompletionVideoPage() {
   const chunksRef = useRef([]);
 
   const reportHref = `/user-dashboard/complete-service/${serviceId}`;
+
+  const goToReportForm = useCallback(() => {
+    router.replace(reportHref);
+  }, [router, reportHref]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,12 +80,31 @@ export default function InstallationCompletionVideoPage() {
         return;
       }
       setData(body);
+
+      const recordRes = await fetch(`/api/service-records/${serviceId}`, { cache: "no-store" });
+      const recordBody = await recordRes.json();
+      let hasUploadedReport = false;
+      if (recordRes.ok) {
+        const name = String(recordBody.record?.installation_report || "").trim();
+        if (name) {
+          hasUploadedReport = true;
+          if (name !== "uploadFO") {
+            setUploadedReportName(name);
+          }
+        }
+      }
+
+      const hasCompletionVideo = Boolean(body.steps?.video_completion);
+      if (hasCompletionVideo || hasUploadedReport) {
+        goToReportForm();
+        return;
+      }
     } catch (err) {
       setError(err.message || "Failed to load service");
     } finally {
       setLoading(false);
     }
-  }, [serviceId, router]);
+  }, [serviceId, router, goToReportForm]);
 
   useEffect(() => {
     if (serviceId) load();
@@ -158,6 +190,137 @@ export default function InstallationCompletionVideoPage() {
     setPreview(URL.createObjectURL(file));
   };
 
+  const downloadBlankReport = async () => {
+    setReportMessage("");
+    setDownloadingBlank(true);
+    try {
+      const res = await fetch(`/api/service-records/${serviceId}`, { cache: "no-store" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Could not load service data.");
+
+      const record = body.record || {};
+      const product = body.product || {};
+      const useInstallationLayout =
+        isInstallationReportLayout(record.complaint_summary) ||
+        String(record.service_type || data?.service?.service_type || "")
+          .trim()
+          .toUpperCase() === "INSTALLATION";
+
+      const reportData = {
+        service_id: record.service_id || serviceId,
+        serial_number: record.serial_number,
+        complaint_summary: record.complaint_summary,
+        status: record.status,
+        completed_date: "",
+        checklist: "",
+        nature_of_complaints: "",
+        observation: "",
+        action_taken: "",
+        replaced: "",
+        to_be_replaced: "",
+        service_rate: "",
+        feedback: "",
+        authorised_person_name: "",
+        authorised_person_designation: "",
+        authorised_person_mobile: "",
+        customer_name: "",
+        customer_designation: "",
+        customer_mobile: "",
+      };
+
+      const productData = {
+        product_name: product.product_name,
+        model: product.model,
+        customer_name: product.customer_name,
+        email: product.email,
+        contact: product.contact,
+        customer_address: product.customer_address,
+        installed_address: product.installed_address,
+        installation_date: product.installation_date,
+        invoice_number: product.invoice_number,
+        invoice_date: product.invoice_date,
+        contact_person: product.contact_person || product.site_person || "",
+        site_person: product.site_person || "",
+      };
+
+      const installData = useInstallationLayout
+        ? {
+            installation_date: "",
+            defects_on_inspection: "",
+            engineer_remarks: "",
+            service_rating: "",
+            customer_feedback: "",
+          }
+        : {
+            defects_on_inspection: "",
+            engineer_remarks: "",
+          };
+
+      const pdf = await generateServiceReportPDF(
+        reportData,
+        productData,
+        installData,
+        [],
+        { isInstallationLayout: useInstallationLayout },
+      );
+      const filename = `Blank_Installation_Report_${serviceId}_${dayjs().format("YYYY-MM-DD")}.pdf`;
+      downloadPDF(pdf, filename);
+      setReportMessage("Blank report downloaded. Fill it and upload below.");
+    } catch (err) {
+      setReportMessage(err.message || "Could not download blank report.");
+    } finally {
+      setDownloadingBlank(false);
+    }
+  };
+
+  const onPickReportFile = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const okType =
+      file.type === "application/pdf" ||
+      file.type.startsWith("image/") ||
+      /\.(pdf|jpg|jpeg|png|webp)$/i.test(file.name);
+    if (!okType) {
+      setReportMessage("Upload a PDF or image file.");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setReportMessage("File is too large. Maximum size is 25 MB.");
+      return;
+    }
+    setReportMessage("");
+    setReportFile(file);
+  };
+
+  const uploadFilledReport = async () => {
+    if (!reportFile) return;
+    setUploadingReport(true);
+    setReportMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("installationFile", reportFile);
+      formData.append("service_id", String(serviceId));
+
+      const res = await fetch("/api/upload-installation", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.message || "Upload failed.");
+      }
+      setUploadedReportName(result.fileName || reportFile.name);
+      setReportFile(null);
+      setReportMessage("Report uploaded. Opening fill report form…");
+      setTimeout(() => goToReportForm(), 800);
+    } catch (err) {
+      setReportMessage(err.message || "Could not upload report.");
+    } finally {
+      setUploadingReport(false);
+    }
+  };
+
   const saveVideo = async () => {
     if (!recordedBlob) return;
 
@@ -177,9 +340,7 @@ export default function InstallationCompletionVideoPage() {
       );
 
       setData(body);
-      setTimeout(() => {
-        router.push(reportHref);
-      }, 1000);
+      setTimeout(() => goToReportForm(), 800);
     } catch (err) {
       setError(err.message || "Could not save video.");
     } finally {
@@ -225,7 +386,8 @@ export default function InstallationCompletionVideoPage() {
           Installation Completion Video
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Record a 45-second video showing the installation is complete. The report form opens after.
+          Upload the completion video or the filled installation report — when either one is done, the
+          online report form opens automatically.
         </p>
         {data?.service && (
           <div className="mt-4 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
@@ -262,6 +424,68 @@ export default function InstallationCompletionVideoPage() {
           {error}
         </p>
       )}
+
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-indigo-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Installation report (PDF)</h2>
+        </div>
+        <p className="mb-4 text-sm text-gray-600">
+          Download the blank installation report, fill it on site, then upload the scanned PDF or photo.
+        </p>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={downloadBlankReport}
+            disabled={downloadingBlank}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-60"
+          >
+            <Download className="h-4 w-4" />
+            {downloadingBlank ? "Preparing PDF…" : "Download blank report"}
+          </button>
+          <label
+            className={`flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-sm text-gray-700 hover:bg-gray-100 ${
+              uploadingReport ? "pointer-events-none opacity-60" : ""
+            }`}
+          >
+            <Upload className="h-5 w-5" />
+            {reportFile ? reportFile.name : "Choose filled report (PDF or image)"}
+            <input
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              disabled={uploadingReport}
+              onChange={onPickReportFile}
+            />
+          </label>
+          {reportFile && (
+            <button
+              type="button"
+              onClick={uploadFilledReport}
+              disabled={uploadingReport}
+              className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {uploadingReport ? "Uploading report…" : "Upload report"}
+            </button>
+          )}
+          {uploadedReportName && (
+            <p className="text-sm text-green-700">
+              Uploaded:{" "}
+              <a
+                href={getCompletionFileSrc(uploadedReportName) || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline"
+              >
+                {uploadedReportName}
+              </a>
+            </p>
+          )}
+          {reportMessage && (
+            <p className="text-sm text-gray-700">{reportMessage}</p>
+          )}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <div className="mb-6">
@@ -363,7 +587,7 @@ export default function InstallationCompletionVideoPage() {
       <div className="mt-4 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
         <p>• Video should show the installation is complete and ready for use</p>
         <p>• Minimum 5 seconds, maximum 45 seconds</p>
-        <p>• After saving, the report form will open automatically</p>
+        <p>• After video or report upload, the fill report form opens automatically</p>
       </div>
     </div>
   );
