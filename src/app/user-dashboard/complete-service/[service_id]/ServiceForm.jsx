@@ -581,11 +581,19 @@ export default function ServiceForm({ service }) {
       );
 
       if (!response.ok) {
-        let errMsg = "Failed to save service record.";
+        const raw = await response.text();
+        let errMsg = `Could not save (HTTP ${response.status}).`;
         try {
-          const errData = await response.json();
+          const errData = JSON.parse(raw);
           if (errData?.message) errMsg = errData.message;
-        } catch (_) {}
+        } catch (_) {
+          if (response.status === 413) {
+            errMsg =
+              "Upload too large. Use fewer/smaller photos or ask IT to raise nginx client_max_body_size.";
+          } else if (raw && raw.length < 300 && !raw.trim().startsWith("<")) {
+            errMsg = raw.trim();
+          }
+        }
         throw new Error(errMsg);
       }
       
@@ -724,8 +732,9 @@ export default function ServiceForm({ service }) {
       router.push("/user-dashboard/view_service_reports");
     } catch (error) {
       console.error("❌ Submission error:", error);
-      const msg = error?.message || "Failed to save service record.";
-      alert(`Failed to save service record.\n${msg}\n\nPlease try again.`);
+      const msg =
+        error?.message || "Failed to save service record. Please try again.";
+      alert(msg);
     } finally {
       setIsLoading(false);
     }

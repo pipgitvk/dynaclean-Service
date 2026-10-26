@@ -66,9 +66,25 @@ export async function POST(request, context) {
   }
 
   let conn;
+  let serviceRecordsHasCompletedAt = false;
   try {
     conn = await getDbConnection();
-    await ensureServiceRecordsCompletedAtColumn(conn);
+    try {
+      await ensureServiceRecordsCompletedAtColumn(conn);
+    } catch (migrateErr) {
+      console.error(
+        "[complete-service] completed_at column migrate failed:",
+        migrateErr?.message || migrateErr
+      );
+    }
+    const [completedAtCols] = await conn.execute(
+      `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'service_records'
+         AND COLUMN_NAME = 'completed_at'`
+    );
+    serviceRecordsHasCompletedAt = completedAtCols.length > 0;
     console.log("✅ Connected to DB");
 
     const formData = await request.formData();
@@ -294,7 +310,9 @@ export async function POST(request, context) {
       Object.assign(updateRecordFields, {
         completion_remark: completionRemark,
         completed_date: completedDate,
-        completed_at: getISTDateTimeString(),
+        ...(serviceRecordsHasCompletedAt
+          ? { completed_at: getISTDateTimeString() }
+          : {}),
         checklist: reportFields.checklist,
         replaced: reportFields.replaced,
         to_be_replaced: reportFields.to_be_replaced,
