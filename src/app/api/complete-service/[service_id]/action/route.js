@@ -10,13 +10,6 @@ import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb",
-    },
-  },
-};
 
 // Helper to save base64 signature
 const saveSignature = async (dataUrl, serviceId, type) => {
