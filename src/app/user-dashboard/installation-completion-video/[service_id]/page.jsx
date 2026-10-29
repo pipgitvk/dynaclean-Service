@@ -210,7 +210,7 @@ export default function InstallationCompletionVideoPage() {
         service_id: record.service_id || serviceId,
         serial_number: record.serial_number,
         complaint_summary: record.complaint_summary,
-        status: record.status,
+        status: "",
         completed_date: "",
         checklist: "",
         nature_of_complaints: "",

@@ -217,4 +217,129 @@ export const PDF_REPORT_STYLES = `
                     height: 100px;
                 }
             }
+
+            .container.installation-single-page {
+                padding: 10px 12px;
+            }
+
+            .container.installation-single-page .company-info {
+                margin-bottom: 12px;
+                gap: 14px;
+            }
+
+            .container.installation-single-page .logo {
+                max-width: 105px;
+            }
+
+            .container.installation-single-page .company-details h1 {
+                font-size: 17px;
+                margin-bottom: 6px;
+            }
+
+            .container.installation-single-page .company-details p,
+            .container.installation-single-page .contact-info p {
+                font-size: 11px;
+                line-height: 1.4;
+            }
+
+            .container.installation-single-page .contact-info {
+                margin: 3px 0;
+            }
+
+            .container.installation-single-page h2.installation-report-title {
+                margin: 10px 0 12px;
+                font-size: 15px;
+            }
+
+            .container.installation-single-page table {
+                margin-bottom: 10px;
+            }
+
+            .container.installation-single-page th,
+            .container.installation-single-page td {
+                padding: 5px 7px;
+                font-size: 11px;
+                line-height: 1.65;
+            }
+
+            .container.installation-single-page .service-group {
+                padding: 8px 10px;
+                margin: 9px 0;
+            }
+
+            .container.installation-single-page .service-group h3 {
+                font-size: 11px;
+                margin: 0 0 8px 0;
+                letter-spacing: 0.02em;
+            }
+
+            .container.installation-single-page .checkbox-group {
+                gap: 8px 12px;
+                margin: 8px 0 4px;
+            }
+
+            .container.installation-single-page .checkbox-item {
+                font-size: 11px;
+                margin-bottom: 3px;
+            }
+
+            .container.installation-single-page .checkbox-item input[type="checkbox"] {
+                margin-right: 5px;
+                transform: scale(0.95);
+            }
+
+            .container.installation-single-page .form-group {
+                margin: 6px 0;
+                gap: 8px;
+            }
+
+            .container.installation-single-page .form-group label,
+            .container.installation-single-page .form-group span {
+                font-size: 11px;
+            }
+
+            .container.installation-single-page .form-group label {
+                min-width: 110px;
+            }
+
+            .container.installation-single-page .signature-section {
+                gap: 12px;
+                margin-top: 12px;
+            }
+
+            .container.installation-single-page .signature-group {
+                padding: 8px;
+            }
+
+            .container.installation-single-page .signature-box {
+                height: 64px;
+                margin: 8px 0;
+            }
+
+            .container.installation-single-page .signature-details {
+                font-size: 10px;
+            }
+
+            .container.installation-single-page .signature-details div {
+                margin: 3px 0;
+            }
+
+            .container.installation-single-page .rating-section {
+                margin: 10px 0 8px;
+            }
+
+            .container.installation-single-page .rating-options {
+                gap: 12px;
+                margin: 6px 0;
+            }
+
+            .container.installation-single-page .rating-option {
+                font-size: 10px;
+            }
+
+            .container.installation-single-page .install-status-row {
+                font-size: 11px;
+                margin: 8px 0 10px;
+                gap: 18px;
+            }
 `;

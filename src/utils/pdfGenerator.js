@@ -276,8 +276,9 @@ const generateInstallationHTMLTemplate = (
   const contactPerson =
     productData?.contact_person || productData?.site_person || "";
   const rate = reportData.service_rate || installData?.service_rating || "";
-  const installationComplete =
-    String(reportData.status || "").toUpperCase() === "COMPLETED";
+  const checklistArray = reportData.checklist
+    ? String(reportData.checklist).split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
 
   const traineeRows =
     trainees && trainees.length > 0
@@ -292,7 +293,22 @@ const generateInstallationHTMLTemplate = (
                         </tr>`
           )
           .join("")
-      : `<tr><td colspan="4" style="text-align:center">—</td></tr>`;
+      : [1, 2, 3]
+          .map(
+            (i) => `
+                        <tr>
+                            <td>${i}</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>`
+          )
+          .join("");
+
+  const statusNorm = String(reportData.status || "").trim().toUpperCase();
+  const completeChecked = statusNorm === "COMPLETED";
+  const incompleteChecked =
+    statusNorm !== "" && statusNorm !== "COMPLETED";
 
   const engineerSrc = signatureSrcForInstallationPdf(
     reportData,
@@ -321,7 +337,7 @@ const generateInstallationHTMLTemplate = (
         <style>${PDF_REPORT_STYLES}</style>
     </head>
     <body>
-        <div class="container">
+        <div class="container installation-single-page">
             <div class="company-info">
                 <div class="logo">
                     <img src="${logoUrl}" alt="Dynaclean Industries" class="logo" crossorigin="anonymous">
@@ -389,11 +405,39 @@ const generateInstallationHTMLTemplate = (
             </table>
 
             <div class="service-group">
+                <h3><strong>CHECKLIST</strong></h3>
+                <div class="checkbox-group">
+                    ${CHECKLIST_ITEMS.map(item => `
+                        <div class="checkbox-item">
+                            <input type="checkbox" ${checklistArray.includes(item) ? 'checked' : ''} disabled>
+                            <span>${item}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="service-group">
+                <h3><strong>SERVICE RENDERED</strong></h3>
+                <div class="form-group">
+                    <label>Nature of Complaint:</label>
+                    <span>${reportData.nature_of_complaints || ""}</span>
+                </div>
+                <div class="form-group">
+                    <label>Observation:</label>
+                    <span>${reportData.observation || ""}</span>
+                </div>
+                <div class="form-group">
+                    <label>Action Taken:</label>
+                    <span>${reportData.action_taken || ""}</span>
+                </div>
+            </div>
+
+            <div class="service-group">
                 <h3><strong>SERVICE RENDERED: INSTALLATION AND DEMONSTRATION</strong></h3>
                 <div class="install-status-row">
                     <strong>Status of Installation:</strong>
-                    <label><input type="radio" ${installationComplete ? "checked" : ""} disabled> Complete</label>
-                    <label><input type="radio" ${!installationComplete ? "checked" : ""} disabled> Incomplete</label>
+                    <label><input type="radio" ${completeChecked ? "checked" : ""} disabled> Complete</label>
+                    <label><input type="radio" ${incompleteChecked ? "checked" : ""} disabled> Incomplete</label>
                 </div>
                 <div class="form-group">
                     <label>Defects found on inspection (if any):</label>
@@ -518,7 +562,7 @@ export const generateServiceReportPDF = async (
     // });
 
     const canvas = await html2canvas(tempContainer, {
-      scale: 1.2,
+      scale: useInstallation ? 1.15 : 1.2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
@@ -536,34 +580,21 @@ export const generateServiceReportPDF = async (
 
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const contentWidth = pageWidth - margin * 2;
+    let contentHeight = (canvas.height * contentWidth) / canvas.width;
+    const maxPageContentHeight = pageHeight - margin * 2;
 
-    // Calculate scaling to fit on single page
-    const imgWidth = pageWidth - 20; // 10mm margin on each side
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let finalWidth = contentWidth;
+    let finalHeight = contentHeight;
 
-    // If content is too tall, scale it down to fit on one page
-    const maxHeight = pageHeight - 20; // 10mm margin top and bottom
-    let finalWidth = imgWidth;
-    let finalHeight = imgHeight;
-
-    if (imgHeight > maxHeight) {
-      finalHeight = maxHeight;
+    if (contentHeight > maxPageContentHeight) {
+      finalHeight = maxPageContentHeight;
       finalWidth = (canvas.width * finalHeight) / canvas.height;
     }
 
-    // Center the content on the page
-    // const xOffset = (pageWidth - finalWidth) / 2;
-    // const yOffset = (pageHeight - finalHeight) / 2;
-
-    // Center horizontally, but stick to top (10mm margin)
     const xOffset = (pageWidth - finalWidth) / 2;
-    const yOffset = 10; // start 10mm from top
-
-
-    // Add image to single page
-    // pdf.addImage(imgData, 'PNG', xOffset, yOffset, finalWidth, finalHeight);
-
-    // Add image to single page, aligned to top
+    const yOffset = margin;
     pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalWidth, finalHeight);
 
 
