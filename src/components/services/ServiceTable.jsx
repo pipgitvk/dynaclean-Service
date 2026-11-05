@@ -198,7 +198,7 @@ export default function ServiceTable({ serviceRecords, role }) {
     );
   };
 
-  const tableColSpan = role === "ADMIN" ? 11 : 10;
+  const tableColSpan = role === "ADMIN" ? 12 : 11;
 
   return (
     <div className="flex justify-center items-center bg-gray-50 py-6 px-4">
@@ -314,6 +314,12 @@ export default function ServiceTable({ serviceRecords, role }) {
                   Complaint Date {getSortIndicator("complaint_date")}
                 </th>
                 <th
+                  onClick={() => handleSort("planned_date")}
+                  className="px-6 py-3 text-left cursor-pointer"
+                >
+                  Planned Date {getSortIndicator("planned_date")}
+                </th>
+                <th
                   onClick={() => handleSort("complaint_summary")}
                   className="px-6 py-3 text-left cursor-pointer"
                 >
@@ -391,6 +397,11 @@ export default function ServiceTable({ serviceRecords, role }) {
                       <td className="px-6 py-3">{record.service_id}</td>
                       <td className="px-6 py-3">
                         {formatDate(record.complaint_date)}
+                      </td>
+                      <td className="px-6 py-3">
+                        {record.planned_date
+                          ? formatDate(record.planned_date)
+                          : "—"}
                       </td>
                       <td className="px-6 py-3">{record.complaint_summary}</td>
                       <td className="px-6 py-3">{record.installed_address}</td>
@@ -524,6 +535,14 @@ export default function ServiceTable({ serviceRecords, role }) {
                       </span>{" "}
                       {formatDate(record.complaint_date)}
                     </p>
+                    {record.planned_date && (
+                      <p className="text-gray-500">
+                        <span className="font-semibold text-gray-700">
+                          Planned Date:
+                        </span>{" "}
+                        {formatDate(record.planned_date)}
+                      </p>
+                    )}
                     <p className="text-gray-500">
                       <span className="font-semibold text-gray-700">
                         Assigned To:
