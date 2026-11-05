@@ -265,7 +265,7 @@ export default function ServiceTable({ serviceRecords, role }) {
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4 px-4">
-          {["COMPLETED", "PENDING FOR SPARES", "PENDING", "WORKED"].map((status) => (
+          {["COMPLETED", "PENDING FOR SPARES", "PENDING", "WORKED", "PLANNED"].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -278,6 +278,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                   ? "bg-orange-500 hover:bg-orange-600"
                   : status === "WORKED"
                   ? "bg-amber-500 hover:bg-amber-600"
+                  : status === "PLANNED"
+                  ? "bg-sky-500 hover:bg-sky-600"
                   : "bg-red-500 hover:bg-red-600"
               }`}
             >
@@ -378,6 +380,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                     rowBackgroundColor = "bg-orange-100";
                   else if (record.status?.toUpperCase() === "WORKED")
                     rowBackgroundColor = "bg-amber-50";
+                  else if (record.status?.toUpperCase() === "PLANNED")
+                    rowBackgroundColor = "bg-sky-50";
 
                   return (
                     <tr
@@ -486,6 +490,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                 cardBackgroundColor = "bg-orange-100";
               else if (record.status?.toUpperCase() === "WORKED")
                 cardBackgroundColor = "bg-amber-50";
+              else if (record.status?.toUpperCase() === "PLANNED")
+                cardBackgroundColor = "bg-sky-50";
 
               return (
                 <div
@@ -503,6 +509,8 @@ export default function ServiceTable({ serviceRecords, role }) {
                           : record.status?.toUpperCase() ===
                             "PENDING FOR SPARES"
                           ? "bg-orange-200 text-orange-800"
+                          : record.status?.toUpperCase() === "PLANNED"
+                          ? "bg-sky-200 text-sky-800"
                           : "bg-gray-200 text-gray-800"
                       }`}
                     >
