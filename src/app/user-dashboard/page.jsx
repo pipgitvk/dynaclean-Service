@@ -48,6 +48,10 @@ export default async function UserDashboardPage() {
       [username],
     );
 
+    const plannedCount = statusRows.filter(
+      (row) => String(row.status || "").trim().toUpperCase() === "PLANNED",
+    ).length;
+
     const completedCount = statusRows.filter(
       (row) =>
         String(row.status || "").trim().toUpperCase() === "COMPLETED" &&
@@ -98,7 +102,7 @@ export default async function UserDashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
           <InfoBox
             title="Completed"
             number={completedCount}
@@ -122,6 +126,12 @@ export default async function UserDashboardPage() {
             number={workedCount}
             url="/user-dashboard/view_service_reports?status=WORKED"
             bgColor="#f59e0b"
+          />
+          <InfoBox
+            title="Planned"
+            number={plannedCount}
+            url="/user-dashboard/view_service_reports?status=PLANNED"
+            bgColor="#0ea5e9"
           />
         </div>
 
