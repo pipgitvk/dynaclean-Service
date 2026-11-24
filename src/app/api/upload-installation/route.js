@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { NextResponse } from 'next/server';
 import { getDbConnection } from '@/lib/db';
+import { saveGoogleFeedbackStep } from '@/lib/saveGoogleFeedbackStep';
 
 export async function POST(req) {
   try {
@@ -22,8 +23,13 @@ export async function POST(req) {
     await mkdir(uploadDir, { recursive: true });
     await writeFile(filePath, buffer);
 
-    // Save filename to service_records table
     const conn = await getDbConnection();
+
+    const feedbackResult = await saveGoogleFeedbackStep(conn, String(serviceId), formData);
+    if (!feedbackResult.ok) {
+      return NextResponse.json({ success: false, message: feedbackResult.message }, { status: 400 });
+    }
+
     const [result] = await conn.execute(
       `UPDATE service_records SET installation_report = ? WHERE service_id = ?`,
       [fileName, serviceId]
@@ -32,12 +38,6 @@ export async function POST(req) {
     if (result.affectedRows === 0) {
       return NextResponse.json({ success: false, message: 'Invalid service ID' }, { status: 404 });
     }
-
-    // Also insert service_id into service_reports table
-    await conn.execute(
-      `INSERT INTO service_reports (service_id) VALUES (?)`,
-      [serviceId]
-    );
 
     return NextResponse.json({ success: true, fileName });
   } catch (error) {

@@ -8,6 +8,11 @@ import dayjs from "dayjs";
 import { generateServiceReportPDF, downloadPDF } from "@/utils/pdfGenerator";
 import { isInstallationReportLayout } from "@/utils/reportLayout";
 import { getCompletionFileSrc } from "@/utils/signatureUrl";
+import CompletionGoogleFeedbackFields, {
+  appendGoogleFeedbackToFormData,
+  emptyGoogleFeedbackState,
+  validateGoogleFeedbackState,
+} from "@/components/services/CompletionGoogleFeedbackFields";
 
 const RECORDING_DURATION = 45; // 45 seconds
 
@@ -55,6 +60,8 @@ export default function InstallationCompletionVideoPage() {
   const [uploadedReportName, setUploadedReportName] = useState("");
   const [downloadingBlank, setDownloadingBlank] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
+  const [engineerName, setEngineerName] = useState("");
+  const [googleFeedback, setGoogleFeedback] = useState(() => emptyGoogleFeedbackState());
 
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -80,6 +87,13 @@ export default function InstallationCompletionVideoPage() {
         return;
       }
       setData(body);
+      const assigned = String(body.service?.assigned_to || "").trim();
+      if (assigned) {
+        setEngineerName(assigned);
+        setGoogleFeedback((prev) =>
+          prev.completedByEngineer ? prev : { ...prev, completedByEngineer: assigned },
+        );
+      }
 
       const recordRes = await fetch(`/api/service-records/${serviceId}`, { cache: "no-store" });
       const recordBody = await recordRes.json();
@@ -109,6 +123,29 @@ export default function InstallationCompletionVideoPage() {
   useEffect(() => {
     if (serviceId) load();
   }, [serviceId, load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/login/me", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const me = await res.json();
+        const name = String(me?.username || "").trim();
+        if (!name || cancelled) return;
+        setEngineerName((prev) => prev || name);
+        setGoogleFeedback((prev) => ({
+          ...prev,
+          completedByEngineer: prev.completedByEngineer || name,
+        }));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -295,12 +332,18 @@ export default function InstallationCompletionVideoPage() {
 
   const uploadFilledReport = async () => {
     if (!reportFile) return;
+    const feedbackError = validateGoogleFeedbackState(googleFeedback);
+    if (feedbackError) {
+      setReportMessage(feedbackError);
+      return;
+    }
     setUploadingReport(true);
     setReportMessage("");
     try {
       const formData = new FormData();
       formData.append("installationFile", reportFile);
       formData.append("service_id", String(serviceId));
+      appendGoogleFeedbackToFormData(formData, googleFeedback);
 
       const res = await fetch("/api/upload-installation", {
         method: "POST",
@@ -323,6 +366,11 @@ export default function InstallationCompletionVideoPage() {
 
   const saveVideo = async () => {
     if (!recordedBlob) return;
+    const feedbackError = validateGoogleFeedbackState(googleFeedback);
+    if (feedbackError) {
+      setError(feedbackError);
+      return;
+    }
 
     setError("");
     setIsSaving(true);
@@ -332,6 +380,7 @@ export default function InstallationCompletionVideoPage() {
       const formData = new FormData();
       formData.append("action", "installation_completion_video");
       formData.append("file", recordedBlob, "installation-completion.webm");
+      appendGoogleFeedbackToFormData(formData, googleFeedback);
 
       const body = await uploadWithProgress(
         `/api/service-report-steps/${serviceId}`,
@@ -424,6 +473,14 @@ export default function InstallationCompletionVideoPage() {
           {error}
         </p>
       )}
+
+      <CompletionGoogleFeedbackFields
+        variant="installation"
+        engineerName={engineerName}
+        value={googleFeedback}
+        onChange={setGoogleFeedback}
+        disabled={isSaving || uploadingReport}
+      />
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="mb-3 flex items-center gap-2">

@@ -42,11 +42,13 @@ export default async function ViewServiceReportsPage() {
       SELECT GROUP_CONCAT(srp.id ORDER BY srp.id SEPARATOR ',')
       FROM service_reports srp
       WHERE srp.service_id = sr.service_id
+        AND srp.service_date IS NOT NULL
     ) AS report_ids,
     (
       SELECT GROUP_CONCAT(srp.service_date ORDER BY srp.id SEPARATOR ',')
       FROM service_reports srp
       WHERE srp.service_id = sr.service_id
+        AND srp.service_date IS NOT NULL
     ) AS report_dates
   FROM service_records sr
   LEFT JOIN warranty_products wp ON sr.serial_number COLLATE utf8mb4_unicode_ci = wp.serial_number

@@ -21,6 +21,11 @@ import {
   saveServiceReportVideoStep,
   uploadServiceReportVideoToCloudinary,
 } from "@/utils/uploadServiceReportVideoClient";
+import CompletionGoogleFeedbackFields, {
+  appendGoogleFeedbackToFormData,
+  emptyGoogleFeedbackState,
+  validateGoogleFeedbackState,
+} from "@/components/services/CompletionGoogleFeedbackFields";
 
 const STEP_DEFS = [
   {
@@ -87,6 +92,8 @@ export default function ServiceReportStepsPage() {
   const [checkingVideo, setCheckingVideo] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadSignature, setUploadSignature] = useState(null);
+  const [engineerName, setEngineerName] = useState("");
+  const [googleFeedback, setGoogleFeedback] = useState(() => emptyGoogleFeedbackState());
   const cancelRef = useRef(false);
   const uploadXhrRef = useRef(null);
 
@@ -130,6 +137,21 @@ export default function ServiceReportStepsPage() {
         return;
       }
       setData(body);
+      const assigned = String(body.service?.assigned_to || "").trim();
+      if (assigned) {
+        setEngineerName(assigned);
+        setGoogleFeedback((prev) =>
+          prev.completedByEngineer ? prev : { ...prev, completedByEngineer: assigned },
+        );
+      }
+      const savedCollected = String(body.googleFeedback?.collected || "").trim().toLowerCase();
+      if (savedCollected === "yes" || savedCollected === "no") {
+        setGoogleFeedback((prev) => ({
+          ...prev,
+          googleFeedbackCollected: savedCollected === "yes" ? "YES" : "NO",
+          existingProofUrl: body.googleFeedback?.proofUrl || prev.existingProofUrl,
+        }));
+      }
       setActiveIndex(firstOpenIndex(body.steps));
     } catch (err) {
       setError(err.message || "Failed to load steps");
@@ -142,10 +164,68 @@ export default function ServiceReportStepsPage() {
     if (serviceId) load();
   }, [serviceId, load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/login/me", { cache: "no-store" });
+        if (!res.ok || cancelled) return;
+        const me = await res.json();
+        const name = String(me?.username || "").trim();
+        if (!name || cancelled) return;
+        setEngineerName((prev) => prev || name);
+        setGoogleFeedback((prev) => ({
+          ...prev,
+          completedByEngineer: prev.completedByEngineer || name,
+        }));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openIndex = useMemo(() => firstOpenIndex(data?.steps), [data]);
   const allDone = openIndex >= STEP_DEFS.length;
 
+  const goToReportForm = useCallback(async () => {
+    const feedbackError = validateGoogleFeedbackState(googleFeedback);
+    if (feedbackError) {
+      setError(feedbackError);
+      return;
+    }
+    if (isStepDone(data?.steps, "video_completion")) {
+      try {
+        const formData = new FormData();
+        formData.append("action", "save_google_feedback");
+        appendGoogleFeedbackToFormData(formData, googleFeedback);
+        const res = await fetch(`/api/service-report-steps/${serviceId}`, {
+          method: "POST",
+          body: formData,
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body.message || "Could not save Google feedback.");
+        }
+        setData(body);
+      } catch (err) {
+        setError(err.message || "Could not save Google feedback.");
+        return;
+      }
+    }
+    router.push(reportHref);
+  }, [googleFeedback, router, reportHref, data?.steps, serviceId]);
+
   const saveAction = async (action, file, durationSec) => {
+    if (action === "video_completion") {
+      const feedbackError = validateGoogleFeedbackState(googleFeedback);
+      if (feedbackError) {
+        setError(feedbackError);
+        return;
+      }
+    }
     setError("");
     cancelRef.current = false;
     setBusyKey(action);
@@ -196,6 +276,9 @@ export default function ServiceReportStepsPage() {
           action,
           uploaded.secure_url,
           duration,
+          action === "video_completion"
+            ? (fd) => appendGoogleFeedbackToFormData(fd, googleFeedback)
+            : undefined,
         );
       } else {
         const formData = new FormData();
@@ -316,6 +399,16 @@ export default function ServiceReportStepsPage() {
       {loading && <p className="text-sm text-gray-500">Loading steps…</p>}
       {error && (
         <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      {!loading && data && (
+        <CompletionGoogleFeedbackFields
+          variant="complaint"
+          engineerName={engineerName}
+          value={googleFeedback}
+          onChange={setGoogleFeedback}
+          disabled={Boolean(busyKey)}
+        />
       )}
 
       {!loading && data && (
@@ -448,7 +541,7 @@ export default function ServiceReportStepsPage() {
                         {done && step.key === "video_completion" && (
                           <button
                             type="button"
-                            onClick={() => router.push(reportHref)}
+                            onClick={goToReportForm}
                             className="w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700"
                           >
                             Add Report
@@ -526,7 +619,7 @@ export default function ServiceReportStepsPage() {
           <p className="text-sm text-green-800">All 6 steps are done. Continue to the service report form.</p>
           <button
             type="button"
-            onClick={() => router.push(reportHref)}
+            onClick={goToReportForm}
             className="mt-3 w-full rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700"
           >
             Add Report

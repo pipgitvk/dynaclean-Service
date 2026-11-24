@@ -92,6 +92,18 @@ export async function POST(request, context) {
 
     // --- Service Record fields
     const status = formData.get("status");
+    const normalizedStatus = String(status || "").trim().toUpperCase();
+    const allowedSubmitStatuses = new Set([
+      "PENDING",
+      "PENDING FOR SPARES",
+      "COMPLETED",
+    ]);
+    if (!allowedSubmitStatuses.has(normalizedStatus)) {
+      return NextResponse.json(
+        { status: "error", message: "Select a valid status before submitting the report." },
+        { status: 400 },
+      );
+    }
     const completionRemark = formData.get("completion_remark");
     const completedDate = formData.get("completed_date");
     const serviceType = formData.get("service_type");
@@ -227,7 +239,7 @@ export async function POST(request, context) {
       after_completion: finalAfterCompletion,
     };
 
-    // === Upsert service_reports on every submit (captures latest form values)
+    // === Create service_reports only when engineer submits this form (not on video/PDF uploads)
     try {
       const serviceDate = formData.get("service_date") || new Date().toISOString().split("T")[0];
 

@@ -62,11 +62,20 @@ export function uploadServiceReportVideoToCloudinary(file, signParams, onProgres
   });
 }
 
-export async function saveServiceReportVideoStep(serviceId, action, videoUrl, duration) {
+export async function saveServiceReportVideoStep(
+  serviceId,
+  action,
+  videoUrl,
+  duration,
+  appendExtraFields,
+) {
   const formData = new FormData();
   formData.append("action", action);
   formData.append("video_url", videoUrl);
   formData.append("duration", String(duration));
+  if (typeof appendExtraFields === "function") {
+    appendExtraFields(formData);
+  }
 
   const res = await fetch(`/api/service-report-steps/${serviceId}`, {
     method: "POST",

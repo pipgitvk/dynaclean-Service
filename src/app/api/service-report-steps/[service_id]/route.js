@@ -12,6 +12,7 @@ import {
   MAX_VIDEO_DURATION_SEC,
   videoDurationErrorMessage,
 } from "@/lib/serviceReportVideoLimits";
+import { saveGoogleFeedbackStep } from "@/lib/saveGoogleFeedbackStep";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -52,7 +53,9 @@ async function loadService(conn, serviceId) {
         s.video_damaged,
         s.video_completion,
         s.work_started_at,
-        s.work_completed_at
+        s.work_completed_at,
+        sr.google_feedback_collected,
+        sr.google_feedback_proof
      FROM service_records sr
      LEFT JOIN service_report_steps s ON s.service_id = sr.service_id
      WHERE sr.service_id = ?`,
@@ -78,6 +81,10 @@ function payloadFromRow(row) {
       video_completion: row.video_completion || null,
       work_started_at: row.work_started_at || null,
       work_completed_at: row.work_completed_at || null,
+    },
+    googleFeedback: {
+      collected: row.google_feedback_collected || "",
+      proofUrl: row.google_feedback_proof || "",
     },
   };
 }
@@ -135,6 +142,15 @@ export async function POST(request, context) {
     const formData = await request.formData();
     const action = String(formData.get("action") || "");
 
+    if (action === "save_google_feedback") {
+      const feedbackResult = await saveGoogleFeedbackStep(conn, serviceId, formData);
+      if (!feedbackResult.ok) {
+        return NextResponse.json({ message: feedbackResult.message }, { status: 400 });
+      }
+      const row = await loadService(conn, serviceId);
+      return NextResponse.json(payloadFromRow(row));
+    }
+
     const isComplaintService = String(existing.service_type || "").trim().toUpperCase() === "COMPLAINT";
     const isInstallationService = String(existing.service_type || "").trim().toUpperCase() === "INSTALLATION";
     const isInstallationVideoAction = action === "installation_completion_video";
@@ -157,6 +173,15 @@ export async function POST(request, context) {
     const blocked = isInstallationVideoAction ? null : missingBefore(current, action);
     if (blocked) {
       return NextResponse.json({ message: blocked }, { status: 400 });
+    }
+
+    const needsGoogleFeedback =
+      action === "video_completion" || isInstallationVideoAction;
+    if (needsGoogleFeedback) {
+      const feedbackResult = await saveGoogleFeedbackStep(conn, serviceId, formData);
+      if (!feedbackResult.ok) {
+        return NextResponse.json({ message: feedbackResult.message }, { status: 400 });
+      }
     }
 
     if (action === "sign_upload") {

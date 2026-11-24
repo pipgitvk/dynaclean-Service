@@ -1,4 +1,5 @@
 import { getDbConnection } from "@/lib/db";
+import { ensureGoogleFeedbackStepColumns } from "@/lib/ensureGoogleFeedbackStepColumns";
 
 const CREATE_SERVICE_REPORT_STEPS = `
 CREATE TABLE IF NOT EXISTS service_report_steps (
@@ -33,5 +34,6 @@ export async function ensureServiceReportStepsTable() {
       `ALTER TABLE service_report_steps MODIFY COLUMN ${column.COLUMN_NAME} TEXT NULL`,
     );
   }
+  await ensureGoogleFeedbackStepColumns(conn);
   return conn;
 }
