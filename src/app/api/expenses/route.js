@@ -106,6 +106,21 @@ import {
   isExpenseCloudinaryEnabled,
   uploadExpenseBufferToCloudinary,
 } from "@/lib/expenseCloudinaryUpload";
+import {
+  ensureExpenseDesignationColumn,
+  ensureExpenseServiceIdColumn,
+  ensureExpenseServiceTypeColumn,
+  ensureExpenseStateColumn,
+  ensureExpenseStatusColumn,
+  ensureExpenseTrainClassColumn,
+  ensureExpenseTravelModeColumn,
+} from "@/lib/fetchExpenseDashboardRows";
+import { isSbiTrainTravelMode } from "@/lib/sbiTravelOptions";
+import {
+  getSbiFoodExpenseError,
+  getSbiHotelExpenseError,
+} from "@/lib/sbiFoodExpenseRules";
+import { INDIAN_STATES } from "@/lib/indianStates";
 
 const UPLOAD_DIR = getExpenseAttachmentsDir();
 
@@ -197,14 +212,93 @@ export async function POST(req) {
     const attachmentsStr = savedFilePaths.join(", "); // Join all saved paths into a single string
 
     const conn = await getDbConnection();
+    await ensureExpenseTravelModeColumn(conn);
+    await ensureExpenseTrainClassColumn(conn);
+    await ensureExpenseServiceTypeColumn(conn);
+    await ensureExpenseServiceIdColumn(conn);
+    await ensureExpenseStatusColumn(conn);
+    await ensureExpenseDesignationColumn(conn);
+    await ensureExpenseStateColumn(conn);
+
+    const travelMode = String(fields.travel_mode || fields.ConveyanceMode || "").trim() || null;
+    const expenseStatus = String(fields.expense_status || "").trim().toLowerCase() || null;
+    const trainClassRaw = String(fields.train_class || "").trim();
+    const trainClass = trainClassRaw || null;
+
+    if (expenseStatus === "travel" && isSbiTrainTravelMode(travelMode) && !trainClass) {
+      return NextResponse.json(
+        { error: "Please select train class (Sleeper / AC)." },
+        { status: 400 },
+      );
+    }
+
+    const serviceType = String(fields.service_type || "").trim() || null;
+    const serviceId = String(fields.service_id || "").trim() || null;
+    if (expenseStatus && !serviceType) {
+      return NextResponse.json(
+        { error: "Please select service type (Installation or Complaint)." },
+        { status: 400 },
+      );
+    }
+
+    const expenseState = String(fields.state || "").trim() || null;
+    if (expenseStatus && !expenseState) {
+      return NextResponse.json({ error: "Please select state." }, { status: 400 });
+    }
+    if (expenseState && !INDIAN_STATES.includes(expenseState)) {
+      return NextResponse.json({ error: "Invalid state selected." }, { status: 400 });
+    }
+
+    if (expenseStatus === "food") {
+      const travelDate = fields.TravelDate;
+      const [foodRows] = await conn.query(
+        `SELECT COALESCE(SUM(MealsCost), 0) AS total
+         FROM expenses
+         WHERE username = ?
+           AND LOWER(COALESCE(expense_status, '')) = 'food'
+           AND TravelDate = ?
+           AND COALESCE(approval_status, '') NOT IN ('Rejected')`,
+        [username, travelDate],
+      );
+      const existingFoodTotal = Number(foodRows?.[0]?.total || 0);
+      const foodError = getSbiFoodExpenseError({
+        mealsCost: fields.MealsCost,
+        existingTotalForDay: existingFoodTotal,
+      });
+      if (foodError) {
+        return NextResponse.json({ error: foodError }, { status: 400 });
+      }
+    }
+
+    if (expenseStatus === "hotel") {
+      const travelDate = fields.TravelDate;
+      const [hotelRows] = await conn.query(
+        `SELECT COALESCE(SUM(HotelCost), 0) AS total
+         FROM expenses
+         WHERE username = ?
+           AND LOWER(COALESCE(expense_status, '')) = 'hotel'
+           AND TravelDate = ?
+           AND COALESCE(approval_status, '') NOT IN ('Rejected')`,
+        [username, travelDate],
+      );
+      const existingHotelTotal = Number(hotelRows?.[0]?.total || 0);
+      const hotelError = getSbiHotelExpenseError({
+        hotelCost: fields.HotelCost,
+        existingTotalForDay: existingHotelTotal,
+      });
+      if (hotelError) {
+        return NextResponse.json({ error: hotelError }, { status: 400 });
+      }
+    }
 
     await conn.query(
       `INSERT INTO expenses (
         username, TravelDate, FromLocation, Tolocation, distance,
-        description, person_name, person_contact, ConveyanceMode,
+        description, person_name, person_contact, designation, state, ConveyanceMode, travel_mode,
+        train_class, expense_status, service_type, service_id,
         TicketCost, HotelCost, MealsCost, OtherExpenses,
         attachments, approval_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         username,
         fields.TravelDate,
@@ -214,14 +308,21 @@ export async function POST(req) {
         fields.description,
         fields.person_name,
         fields.person_contact,
-        fields.ConveyanceMode,
+        fields.designation || null,
+        expenseState,
+        travelMode,
+        travelMode,
+        isSbiTrainTravelMode(travelMode) ? trainClass : null,
+        expenseStatus,
+        serviceType,
+        serviceId,
         fields.TicketCost,
         fields.HotelCost,
         fields.MealsCost,
         fields.OtherExpenses,
-        attachmentsStr, // This now contains comma-separated local paths
+        attachmentsStr,
         "Pending",
-      ]
+      ],
     );
 
     revalidatePath("/user-dashboard/expenses");
